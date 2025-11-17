@@ -29,7 +29,7 @@ def init_args(env, **args):
     num_threads_main = args.get("num_threads_main", None)
     if num_threads_main is None:
         if "serial" in args["trainer"]:
-            num_threads_main = 4
+            num_threads_main = 1
         else:
             num_threads_main = 1
     torch.set_num_threads(num_threads_main)
@@ -110,7 +110,7 @@ def init_args(env, **args):
         dir_path = os.path.dirname(dir_path)
         args["save_folder"] = os.path.join(
             dir_path + "/results/",args["env_id"],
-            args["algorithm"] +'_'+
+            args["algorithm"] + f'-{args["seed"]}' +'_'+
             datetime.datetime.now().strftime("%y%m%d-%H%M%S"),
         )
     os.makedirs(args["save_folder"], exist_ok=True)

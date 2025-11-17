@@ -98,8 +98,7 @@ class BaseSampler(metaclass=ABCMeta):
     def get_total_sample_number(self) -> int:
         return self.total_sample_number
     
-    def _step(self) -> List[Experience]:
-        # take action using behavior policy
+    def get_action(self):
         if not self._is_vector:
             batch_obs = torch.from_numpy(
                 np.expand_dims(self.obs, axis=0).astype("float32")
@@ -120,12 +119,18 @@ class BaseSampler(metaclass=ABCMeta):
         if self.noise_params is not None:
             action = self.noise_processor.sample(action)
         
+        return action, logp
+    
+    def _step(self) -> List[Experience]:
+        # take action using behavior policy
+        action, logp = self.get_action()
         if self.action_type == "continu":
             action_clip = action.clip(
                 self.env.action_space.low, self.env.action_space.high
             )
         else:
             action_clip = action
+        
         
         # interact with environment
         if self._is_vector:
