@@ -389,9 +389,12 @@ class DSACU(AlgorithmBase):
                 
             if self.share_target:
                 distances = torch.abs(q_next_all - q_next.unsqueeze(0))
-                avg_distances = torch.mean(distances, dim=1)  # [num_q]
-                closest_idx = torch.argmin(avg_distances).item()
-                shared_q_next_sample = q_next_samples[closest_idx]
+                closest_indices = torch.argmin(distances, dim=0)  # [B]
+                q_next_samples_all = torch.stack(q_next_samples)  # [num_q, B]
+                shared_q_next_sample = q_next_samples_all.gather(
+                    dim=0, 
+                    index=closest_indices.unsqueeze(0)
+                ).squeeze(0)
 
         total_loss = 0
         q_values = []
