@@ -9,13 +9,14 @@
 
 import numpy as np
 import torch
+import os
 
 from gops.create_pkg.create_env import create_env
 from gops.create_pkg.create_alg import create_approx_contrainer
 from gops.utils.common_utils import set_seed
 
 
-class Evaluator:
+class EvaluatorGetsa:
     def __init__(self, index=0, **kwargs):
         self.reward_scale = kwargs["reward_scale"]
         kwargs.update({
@@ -105,13 +106,21 @@ class Evaluator:
                 StochaQ1 = self.networks.q1(obs_tensor, torch.tensor(action_tensor))
                 StochaQ2 = self.networks.q2(obs_tensor, torch.tensor(action_tensor))
                 Q_output_gpu = torch.min(StochaQ1[..., 0], StochaQ2[..., 0])
+                std_output_gpu = torch.where(
+                    StochaQ1[..., 0] < StochaQ2[..., 0],
+                    StochaQ1[..., 1], 
+                    StochaQ2[..., 1]
+                )
             elif hasattr(self.networks, 'q'):
                 StochaQ = self.networks.q(obs_tensor, torch.tensor(action_tensor))
                 Q_output_gpu = StochaQ[..., 0]
+                std_output_gpu = StochaQ[..., 1]
             else:
                 raise AttributeError("Neither 'q1' nor 'q' method is found in the networks object. \
                                      Please ensure at least one of them is implemented.")
         Q_output_list = Q_output_gpu.cpu().numpy()
+        std_output_list = std_output_gpu.cpu().numpy()
+        
         for i in range(min(200, len(reward_list))):
             Q_true = self.reward_scale * (sum([r * (gamma**j) for j, r in enumerate(reward_list[i:-1])]) \
                     - alpha * sum([log_prob * (gamma**j) for j, log_prob in enumerate(log_prob_list[i+1:])]) \
@@ -127,6 +136,21 @@ class Evaluator:
         qx_tb_eval_dict['Q_bias_std'] = np.std(Q_bias_list)
         qx_tb_eval_dict['Episode_len'] = len(reward_list)
         qx_tb_eval_dict['over_ratio'] = over_ratio
+
+        top_k_indices = np.argsort(Q_output_list)[-50:][::-1]
+        track_dict = {
+            "iter": iteration,
+            "state": obs_array[top_k_indices],
+            "action": action_array[top_k_indices],
+            "Q": Q_output_list[top_k_indices]
+        }
+        track_dir = os.path.join(self.save_folder, "evaluator", "track")
+        os.makedirs(track_dir, exist_ok=True)
+        np.save(
+            track_dir
+            + "/iter{}_ep{}".format(iteration, self.print_time),
+            track_dict,
+        )
         '''------------------------yzy's part------------------------'''
 
         return qx_tb_eval_dict

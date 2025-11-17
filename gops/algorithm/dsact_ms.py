@@ -24,6 +24,7 @@ import torch
 import torch.nn as nn
 from torch.distributions import Normal
 from torch.optim import Adam
+import numpy as np
 
 from gops.algorithm.base import AlgorithmBase, ApprBase
 from gops.create_pkg.create_apprfunc import create_apprfunc
@@ -75,7 +76,7 @@ class ApproxContainer(ApprBase):
         return self.policy.get_act_dist(logits)
 
 
-class DSACT(AlgorithmBase):
+class DSACTMs(AlgorithmBase):
     """DSAC algorithm with three refinements, higher performance and more stable.
 
     Paper: https://arxiv.org/abs/2310.05858
@@ -113,6 +114,9 @@ class DSACT(AlgorithmBase):
         self.mean_std1= None
         self.mean_std2= None
         self.tau_b = kwargs.get("tau_b", self.tau)
+        self.num_samples = kwargs["num_samples"]
+        self.enable_track = kwargs["enable_track"]
+        self.track_file = np.load(kwargs["track_file"], allow_pickle=True).item()
 
     @property
     def adjustable_parameters(self):
@@ -188,14 +192,6 @@ class DSACT(AlgorithmBase):
         loss_q.backward()
         q_diff = torch.abs(q1 - q2)
         std_diff = torch.abs(std1 - std2)
-        q_rel_diff = torch.clip(
-            2 * q_diff / torch.clip(torch.abs(q1 + q2), min=0.1), 
-            max=2.0
-        )
-        std_rel_diff = torch.clip(
-            2 * std_diff / torch.clip(std1 + std2, min=0.1), 
-            max=2.0
-        )
 
         for p in self.networks.q1.parameters():
             p.requires_grad = False
@@ -222,8 +218,6 @@ class DSACT(AlgorithmBase):
             "DSAC2/critic_avg_q2-RL iter": q2.item(),
             "DSAC2/critic_avg_q_diff-RL iter": q_diff.item(),
             "DSAC2/critic_avg_std_diff-RL iter": std_diff.item(),
-            "DSAC2/critic_avg_q_rel_diff-RL iter": q_rel_diff.item(),
-            "DSAC2/critic_avg_std_rel_diff-RL iter": std_rel_diff.item(),
             "DSAC2/critic_avg_std1-RL iter": std1.item(),
             "DSAC2/critic_avg_std2-RL iter": std2.item(),
             "DSAC2/critic_avg_min_std1-RL iter": min_std1.item(),
@@ -239,6 +233,32 @@ class DSACT(AlgorithmBase):
             tb_tags["alg_time"]: (time.time() - start_time) * 1000,
         }
 
+        if self.enable_track:
+            device = obs.device
+            with torch.no_grad():
+                for i in range(1):
+                    obs = self.track_file["state"][i]
+                    act = self.track_file["action"][i]
+                    obs = torch.from_numpy(obs).to(device=device)
+                    act = torch.from_numpy(act).to(device=device)
+                    q1, q1_std, q1_sample = self._q_evaluate_ms(obs, act, self.networks.q1)
+                    q2, q2_std, q2_sample = self._q_evaluate_ms(obs, act, self.networks.q2)
+                    min_mask = q1 < q2
+                    q_sample = torch.where(min_mask.unsqueeze(-1), q1_sample, q2_sample)
+                    q_ab_sample = torch.min(q1_sample, q2_sample)
+                    dsact_mean = torch.mean(q_sample)
+                    dsacf_mean = torch.mean(q_ab_sample)
+                    dsact_std = torch.std(q_sample)
+                    dsacf_std = torch.std(q_ab_sample)
+                    tb_info[f"Track/{i}_q1"] = q1.detach()
+                    tb_info[f"Track/{i}_q2"] = q2.detach()
+                    tb_info[f"Track/{i}_std1"] = q1_std.detach()
+                    tb_info[f"Track/{i}_std2"] = q2_std.detach()
+                    tb_info[f"Track/{i}_dsact_mean"] = dsact_mean.detach()
+                    tb_info[f"Track/{i}_dsacf_mean"] = dsacf_mean.detach()
+                    tb_info[f"Track/{i}_dsact_std"] = dsact_std.detach()
+                    tb_info[f"Track/{i}_dsacf_std"] = dsacf_std.detach()
+
         return tb_info
 
     def _q_evaluate(self, obs, act, qnet):
@@ -248,6 +268,17 @@ class DSACT(AlgorithmBase):
         z = normal.sample()
         z = torch.clamp(z, -3, 3)
         q_value = mean + torch.mul(z, std)
+        return mean, std, q_value
+    
+    def _q_evaluate_ms(self, obs, act, qnet):
+        StochaQ = qnet(obs, act)
+        mean, std = StochaQ[..., 0], StochaQ[..., -1]
+        normal = Normal(torch.zeros_like(mean), torch.ones_like(std))
+        
+        z = normal.sample((self.num_samples,))  # 形状 [5, *mean.shape]
+        z = torch.clamp(z, -3, 3)
+        z = z.moveaxis(0, -1)   # 现在形状为 [*mean.shape, 5]
+        q_value = mean.unsqueeze(-1) + std.unsqueeze(-1) * z
         return mean, std, q_value
 
     def _compute_loss_q(self, data: DataDict):
@@ -275,15 +306,16 @@ class DSACT(AlgorithmBase):
             self.mean_std2 = (1 - self.tau_b) * self.mean_std2 + self.tau_b * torch.mean(q2_std.detach())
 
         with torch.no_grad():
-            q1_next, _, q1_next_sample = self._q_evaluate(
+            q1_next, _, q1_next_sample = self._q_evaluate_ms(
                 obs2, act2, self.networks.q1_target
             )
             
-            q2_next, _, q2_next_sample = self._q_evaluate(
+            q2_next, _, q2_next_sample = self._q_evaluate_ms(
                 obs2, act2, self.networks.q2_target
             )
             q_next = torch.min(q1_next, q2_next)
-            q_next_sample = torch.where(q1_next < q2_next, q1_next_sample, q2_next_sample)
+            min_mask = q1_next < q2_next
+            q_next_sample = torch.where(min_mask.unsqueeze(-1), q1_next_sample, q2_next_sample)
 
         target_q1, target_q1_bound = self._compute_target_q(
             rew,
@@ -309,15 +341,17 @@ class DSACT(AlgorithmBase):
         q2_std_detach = torch.clamp(q2_std, min=0.).detach()
         bias = 0.1
 
+        variance1 = torch.mean(torch.pow(q1.unsqueeze(-1).detach() - target_q1_bound, 2), dim=-1)
         q1_loss = (torch.pow(self.mean_std1, 2) + bias) * torch.mean(
             -(target_q1 - q1).detach() / ( torch.pow(q1_std_detach, 2)+ bias)*q1
-            -((torch.pow(q1.detach() - target_q1_bound, 2)- q1_std_detach.pow(2) )/ (torch.pow(q1_std_detach, 3) +bias)
+            -((variance1 - q1_std_detach.pow(2) )/ (torch.pow(q1_std_detach, 3) +bias)
             )*q1_std
         )
 
+        variance2 = torch.mean(torch.pow(q2.unsqueeze(-1).detach() - target_q2_bound, 2), dim=-1)
         q2_loss = (torch.pow(self.mean_std2, 2) + bias)*torch.mean(
             -(target_q2 - q2).detach() / ( torch.pow(q2_std_detach, 2)+ bias)*q2
-            -((torch.pow(q2.detach() - target_q2_bound, 2)- q2_std_detach.pow(2) )/ (torch.pow(q2_std_detach, 3) +bias)
+            -((variance2 - q2_std_detach.pow(2) )/ (torch.pow(q2_std_detach, 3) +bias)
             )*q2_std
         )
 
@@ -328,12 +362,12 @@ class DSACT(AlgorithmBase):
         target_q = r + (1 - done) * self.gamma * (
             q_next - self._get_alpha() * log_prob_a_next
         )
-        target_q_sample = r + (1 - done) * self.gamma * (
-            q_next_sample - self._get_alpha() * log_prob_a_next
+        target_q_sample = r.unsqueeze(-1) + (1 - done.unsqueeze(-1)) * self.gamma * (
+            q_next_sample - self._get_alpha() * log_prob_a_next.unsqueeze(-1)
         )
-        td_bound = 3 * q_std
-        difference = torch.clamp(target_q_sample - q, -td_bound, td_bound)
-        target_q_bound = q + difference
+        td_bound = 3 * q_std.unsqueeze(-1)
+        difference = torch.clamp(target_q_sample - q.unsqueeze(-1), -td_bound, td_bound)
+        target_q_bound = q.unsqueeze(-1) + difference
         return target_q.detach(), target_q_bound.detach()
 
     def _compute_loss_policy(self, data: DataDict):

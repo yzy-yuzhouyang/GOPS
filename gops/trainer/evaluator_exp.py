@@ -9,13 +9,14 @@
 
 import numpy as np
 import torch
+import os
 
 from gops.create_pkg.create_env import create_env
 from gops.create_pkg.create_alg import create_approx_contrainer
 from gops.utils.common_utils import set_seed
 
 
-class Evaluator:
+class EvaluatorExp:
     def __init__(self, index=0, **kwargs):
         self.reward_scale = kwargs["reward_scale"]
         kwargs.update({
@@ -105,13 +106,35 @@ class Evaluator:
                 StochaQ1 = self.networks.q1(obs_tensor, torch.tensor(action_tensor))
                 StochaQ2 = self.networks.q2(obs_tensor, torch.tensor(action_tensor))
                 Q_output_gpu = torch.min(StochaQ1[..., 0], StochaQ2[..., 0])
+                Q_diff_gpu = torch.abs(StochaQ1[..., 0] - StochaQ2[..., 0])
+                std_diff_gpu = torch.abs(StochaQ1[..., 1] - StochaQ2[..., 1])
+                std_output_gpu = torch.where(
+                    StochaQ1[..., 0] < StochaQ2[..., 0],
+                    StochaQ1[..., 1], 
+                    StochaQ2[..., 1]
+                )
+                Q_rel_diff_gpu = torch.clip(
+                    2 * Q_diff_gpu / torch.clip(torch.abs(StochaQ1[..., 0] + StochaQ2[..., 0]), min=0.1), 
+                    max=2.0
+                )
+                std_rel_diff_gpu = torch.clip(
+                    2 * std_diff_gpu / torch.clip(StochaQ1[..., 1] + StochaQ2[..., 1], min=0.1), 
+                    max=2.0
+                )
             elif hasattr(self.networks, 'q'):
                 StochaQ = self.networks.q(obs_tensor, torch.tensor(action_tensor))
                 Q_output_gpu = StochaQ[..., 0]
+                std_output_gpu = StochaQ[..., 1]
             else:
                 raise AttributeError("Neither 'q1' nor 'q' method is found in the networks object. \
                                      Please ensure at least one of them is implemented.")
         Q_output_list = Q_output_gpu.cpu().numpy()
+        Q_diff_list = Q_diff_gpu.cpu().numpy()
+        std_output_list = std_output_gpu.cpu().numpy()
+        std_diff_list = std_diff_gpu.cpu().numpy()
+        Q_rel_diff_list = Q_rel_diff_gpu.cpu().numpy()
+        std_rel_diff_list = std_rel_diff_gpu.cpu().numpy()
+        
         for i in range(min(200, len(reward_list))):
             Q_true = self.reward_scale * (sum([r * (gamma**j) for j, r in enumerate(reward_list[i:-1])]) \
                     - alpha * sum([log_prob * (gamma**j) for j, log_prob in enumerate(log_prob_list[i+1:])]) \
@@ -123,10 +146,32 @@ class Evaluator:
         qx_tb_eval_dict["total_avg_return"] = sum(reward_list)
         qx_tb_eval_dict['real_Q'] = np.mean(Q_true_list)
         qx_tb_eval_dict['output_Q'] = np.mean(Q_output_list)
+        qx_tb_eval_dict['Q_diff_mean'] = np.mean(Q_diff_list)
+        qx_tb_eval_dict['std_diff_mean'] = np.mean(std_diff_list)
+        qx_tb_eval_dict['Q_rel_diff_mean'] = np.mean(Q_rel_diff_list)
+        qx_tb_eval_dict['std_rel_diff_mean'] = np.mean(std_rel_diff_list)
         qx_tb_eval_dict['Q_bias_mean'] = np.mean(Q_bias_list)
         qx_tb_eval_dict['Q_bias_std'] = np.std(Q_bias_list)
         qx_tb_eval_dict['Episode_len'] = len(reward_list)
         qx_tb_eval_dict['over_ratio'] = over_ratio
+
+        visualize_dict = {
+            "iter": iteration,
+            "std": std_output_list,
+            "Q": Q_output_list,
+            "bias": Q_bias_list,
+            "diff": Q_diff_list,
+            "std_diff": std_diff_list,
+            "rel_diff": Q_rel_diff_list,
+            "std_rel_diff": std_rel_diff_list,
+        }
+        visualize_dir = os.path.join(self.save_folder, "evaluator", "visualize")
+        os.makedirs(visualize_dir, exist_ok=True)
+        np.save(
+            visualize_dir
+            + "/iter{}_ep{}".format(iteration, self.print_time),
+            visualize_dict,
+        )
         '''------------------------yzy's part------------------------'''
 
         return qx_tb_eval_dict

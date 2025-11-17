@@ -75,7 +75,7 @@ class ApproxContainer(ApprBase):
         return self.policy.get_act_dist(logits)
 
 
-class DSACT(AlgorithmBase):
+class DSACTMap(AlgorithmBase):
     """DSAC algorithm with three refinements, higher performance and more stable.
 
     Paper: https://arxiv.org/abs/2310.05858
@@ -113,6 +113,12 @@ class DSACT(AlgorithmBase):
         self.mean_std1= None
         self.mean_std2= None
         self.tau_b = kwargs.get("tau_b", self.tau)
+        self.stop = kwargs['stop']
+        self.beta_init = kwargs['beta_init']
+        self.beta = self.beta_init
+        self.near_end = False
+        self.max_iteration = kwargs['max_iteration']
+        self.use_avg = kwargs['use_avg']
 
     @property
     def adjustable_parameters(self):
@@ -234,6 +240,7 @@ class DSACT(AlgorithmBase):
             "DSAC2/policy_std-RL iter": policy_std,
             "DSAC2/entropy-RL iter": entropy.item(),
             "DSAC2/alpha-RL iter": self._get_alpha(),
+            "DSAC2/beta-RL iter": self.beta,
             "DSAC2/mean_std1": self.mean_std1,
             "DSAC2/mean_std2": self.mean_std2,
             tb_tags["alg_time"]: (time.time() - start_time) * 1000,
@@ -275,15 +282,22 @@ class DSACT(AlgorithmBase):
             self.mean_std2 = (1 - self.tau_b) * self.mean_std2 + self.tau_b * torch.mean(q2_std.detach())
 
         with torch.no_grad():
-            q1_next, _, q1_next_sample = self._q_evaluate(
+            q1_next, q1_std_next, q1_next_sample = self._q_evaluate(
                 obs2, act2, self.networks.q1_target
             )
             
-            q2_next, _, q2_next_sample = self._q_evaluate(
+            q2_next, q2_std_next, q2_next_sample = self._q_evaluate(
                 obs2, act2, self.networks.q2_target
             )
-            q_next = torch.min(q1_next, q2_next)
-            q_next_sample = torch.where(q1_next < q2_next, q1_next_sample, q2_next_sample)
+            if self.use_avg:
+                q_next = torch.min(q1_next, q2_next)
+                q_next = q_next - self.beta * torch.sqrt((q1_std_next**2 + q2_std_next**2) / 2)
+            else:
+                q_next = torch.min(q1_next - self.beta * q1_std_next, q2_next - self.beta * q2_std_next)
+            if self.near_end:
+                q_next_sample = torch.min(q1_next_sample, q2_next_sample)
+            else:
+                q_next_sample = torch.where(q1_next < q2_next, q1_next_sample, q2_next_sample)
 
         target_q1, target_q1_bound = self._compute_target_q(
             rew,
@@ -338,9 +352,10 @@ class DSACT(AlgorithmBase):
 
     def _compute_loss_policy(self, data: DataDict):
         obs, new_act, new_log_prob = data["obs"], data["new_act"], data["new_log_prob"]
-        q1, _, _ = self._q_evaluate(obs, new_act, self.networks.q1)
-        q2, _, _ = self._q_evaluate(obs, new_act, self.networks.q2)
-        loss_policy = (self._get_alpha() * new_log_prob - torch.min(q1,q2)).mean()
+        q1, q1_std, _ = self._q_evaluate(obs, new_act, self.networks.q1)
+        q2, q2_std, _ = self._q_evaluate(obs, new_act, self.networks.q2)
+        # loss_policy = (self._get_alpha() * new_log_prob - torch.min(q1-self.beta*q1_std,q2-self.beta*q2_std)).mean()
+        loss_policy = (self._get_alpha() * new_log_prob - torch.min(q1, q2)).mean()
         entropy = -new_log_prob.detach().mean()
         return loss_policy, entropy
 
@@ -356,7 +371,17 @@ class DSACT(AlgorithmBase):
         self.networks.q1_optimizer.step()
         self.networks.q2_optimizer.step()
 
+        if iteration % 10000 == 0:
+            print("beta: ",self.beta)
+
         if iteration % self.delay_update == 0:
+            phi = iteration / self.max_iteration
+            if not self.near_end and phi > self.stop:
+                self.beta = 0
+                self.near_end = True
+            if not self.near_end:
+                self.beta = self.beta_init * math.cos(math.pi * phi * 0.5 / self.stop)
+
             self.networks.policy_optimizer.step()
 
             if self.auto_alpha:

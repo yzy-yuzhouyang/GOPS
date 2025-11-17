@@ -21,6 +21,7 @@ __all__ = [
     "ActionValue",
     "ActionValueDis",
     "ActionValueDistri",
+    "ActionValueDistriSeperated",
     "StochaPolicyDis",
     "StateValue",
 ]
@@ -319,6 +320,45 @@ class ActionValueDistri(nn.Module):
         logits = self.q(torch.cat([obs, act], dim=-1))
         value_mean, value_std = torch.chunk(logits, chunks=2, dim=-1)
         value_std = torch.nn.functional.softplus(value_std) 
+        
+        return torch.cat((value_mean, value_std), dim=-1)
+
+
+class ActionValueDistriSeperated(nn.Module):
+    """
+    Approximated function of distributed action-value function.
+    Input: observation.
+    Output: parameters of action-value distribution.
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__()
+        obs_dim = kwargs["obs_dim"]
+        act_dim = kwargs["act_dim"]
+        hidden_sizes = kwargs["hidden_sizes"]
+        
+        # 创建 Q 值的网络分支
+        self.q_mean_net = mlp(
+            [obs_dim + act_dim] + list(hidden_sizes) + [1],
+            get_activation_func(kwargs["hidden_activation"]),
+            get_activation_func(kwargs["output_activation"]),
+        )
+        
+        # 创建标准差(std)的网络分支
+        self.q_std_net = mlp(
+            [obs_dim + act_dim] + list(hidden_sizes) + [1],
+            get_activation_func(kwargs["hidden_activation"]),
+            get_activation_func(kwargs["output_activation"]),
+        )
+        
+        if "min_log_std" in kwargs or "max_log_std" in kwargs:
+            warnings.warn("min_log_std and max_log_std are deprecated in ActionValueDistri.")
+
+    def forward(self, obs, act):
+        # 分别计算Q值和std
+        value_mean = self.q_mean_net(torch.cat([obs, act], dim=-1))
+        value_std_pre = self.q_std_net(torch.cat([obs, act], dim=-1))
+        value_std = torch.nn.functional.softplus(value_std_pre) 
         
         return torch.cat((value_mean, value_std), dim=-1)
 

@@ -27,7 +27,7 @@ from gops.utils.tensorboard_setup import add_scalars, tb_tags
 from gops.utils.log_data import LogData
 
 
-class OffSerialTrainer:
+class OffSerialDSACUTrainer:
     def __init__(self, alg, sampler, buffer, evaluator, **kwargs):
         self.alg = alg
         self.sampler = sampler
@@ -52,6 +52,18 @@ class OffSerialTrainer:
         self.best_tar = -inf
         self.save_folder = kwargs["save_folder"]
         self.iteration = 0
+        self.overestimation = 0
+        self.oe_std_factor = kwargs['oe_std_factor']
+        self.update_beta = False
+        self.early_flag = True
+        self.mix_mode = kwargs["mix_mode"]
+        # Mode 1
+        # self.last_update_iteration = 0
+        # self.convert_mode = False
+        # self.min_overerestimation = 0
+        # # Mode 2
+        # self.int_weight = 0.005
+        # self.integration = 0
 
         self.writer = SummaryWriter(log_dir=self.save_folder, flush_secs=20)
         # flush tensorboard at the beginning
@@ -80,6 +92,32 @@ class OffSerialTrainer:
         # sampling
         if self.iteration % self.sample_interval == 0:
             with ModuleOnDevice(self.networks, "cpu"):
+                # Mode 1
+                if self.mix_mode == "continue":
+                    mix_ratio = 1 - self.networks.beta.item() / self.networks.beta_init
+                    if mix_ratio > 1e-4 and mix_ratio < 1 - 1e-4:
+                        if torch.rand(1).item() < mix_ratio:
+                            self.sampler.use_target_policy = True
+                        else:
+                            self.sampler.use_target_policy = False
+                    elif mix_ratio <= 1e-4:
+                        self.sampler.use_target_policy = False
+                    else:
+                        self.sampler.use_target_policy = True
+
+                # Mode 2
+                elif self.mix_mode == "step":
+                    if self.networks.beta.item() < 1e-6:
+                        self.sampler.use_target_policy = True
+                    else:
+                        self.sampler.use_target_policy = False
+
+                elif self.mix_mode == "no":
+                    self.sampler.use_target_policy = False
+
+                else:
+                    raise ValueError(f"不支持的mix_mode: {self.mix_mode}，当前仅支持 'continue' 和 'step' 模式")
+                
                 sampler_samples, sampler_tb_dict = self.sampler.sample()
             self.buffer.add_batch(sampler_samples)
             self.sampler_tb_dict.add_average(sampler_tb_dict)
@@ -95,12 +133,21 @@ class OffSerialTrainer:
         self.networks.train()
         if self.per_flag:
             alg_tb_dict, idx, new_priority = self.alg.local_update(
-                replay_samples, self.iteration
+                replay_samples, 
+                self.iteration, 
+                self.update_beta, 
+                self.overestimation
             )
             self.buffer.update_batch(idx, new_priority)
         else:
-            alg_tb_dict = self.alg.local_update(replay_samples, self.iteration)
+            alg_tb_dict = self.alg.local_update(
+                replay_samples, 
+                self.iteration, 
+                self.update_beta, 
+                self.overestimation
+            )
         self.networks.eval()
+        self.update_beta = False
 
         # log
         if self.iteration % self.log_save_interval == 0:
@@ -124,7 +171,48 @@ class OffSerialTrainer:
                 total_avg_return = avg_tb_eval_dict['total_avg_return']
                 real_Q = avg_tb_eval_dict['real_Q']
                 output_Q = avg_tb_eval_dict['output_Q']
+                Q_diff_mean = avg_tb_eval_dict["Q_diff_mean"]
+                std_diff_mean = avg_tb_eval_dict["std_diff_mean"]
+                Q_rel_diff_mean = avg_tb_eval_dict["Q_rel_diff_mean"]
+                std_rel_diff_mean = avg_tb_eval_dict["std_rel_diff_mean"]
                 Q_bias_mean = avg_tb_eval_dict['Q_bias_mean']
+                Q_bias_std = avg_tb_eval_dict['Q_bias_std']
+
+                # Mode 0: simple
+                if self.early_flag:
+                    if Q_bias_mean > 0:
+                        self.early_flag = False
+                    self.overestimation = 0
+                else:
+                    self.overestimation = Q_bias_mean + self.oe_std_factor * Q_bias_std
+
+                # Mode 1: convert
+                # if self.convert_mode:
+                #     self.overestimation = - Q_bias_mean + 2*self.min_overerestimation
+                #     if self.overestimation > Q_bias_mean: 
+                #         self.convert_mode = False
+                # else:
+                #     if self.early_flag:
+                #         self.overestimation = 0
+                #         if Q_bias_mean>0:
+                #             self.early_flag = False
+                #     else:
+                #         self.overestimation = Q_bias_mean
+                #         if Q_bias_mean < self.min_overerestimation:
+                #             self.min_overerestimation = Q_bias_mean
+                #             self.last_update_iteration = self.iteration
+                #         if self.min_overerestimation < 0 and self.iteration - self.last_update_iteration >= 80000:
+                #             self.convert_mode = True
+
+                # Mode 2: integrate
+                # self.integration += Q_bias_mean
+                # self.overestimation = Q_bias_mean + self.int_weight * self.integration
+
+                # if self.overestimation < 0 : 
+                #     self.update_beta = True
+                # else:
+                #     self.update_beta = False
+                self.update_beta = True
                 Q_bias_std = avg_tb_eval_dict['Q_bias_std']
                 Episode_len = avg_tb_eval_dict['Episode_len']
                 over_ratio = avg_tb_eval_dict['over_ratio']
@@ -181,8 +269,33 @@ class OffSerialTrainer:
                     self.iteration
                 )
                 self.writer.add_scalar(
+                    tb_tags["Q diff mean"],
+                    Q_diff_mean,
+                    self.iteration
+                )
+                self.writer.add_scalar(
+                    tb_tags["std diff mean"],
+                    std_diff_mean,
+                    self.iteration
+                )
+                self.writer.add_scalar(
+                    tb_tags["Q rel diff mean"],
+                    Q_rel_diff_mean,
+                    self.iteration
+                )
+                self.writer.add_scalar(
+                    tb_tags["std rel diff mean"],
+                    std_rel_diff_mean,
+                    self.iteration
+                )
+                self.writer.add_scalar(
                     tb_tags["Q bias mean"],
                     Q_bias_mean,
+                    self.iteration
+                )
+                self.writer.add_scalar(
+                    tb_tags["fake overestimation"],
+                    self.overestimation,
                     self.iteration
                 )
                 self.writer.add_scalar(

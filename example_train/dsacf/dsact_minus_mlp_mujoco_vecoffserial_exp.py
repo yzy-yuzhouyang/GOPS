@@ -6,8 +6,8 @@
 #  Lab Leader: Prof. Shengbo Eben Li
 #  Email: lisb04@gmail.com
 #
-#  Description: example for dsac + humanoidconti + mlp + offserial
-#  Update Date: 2021-03-05, Wenxuan Wang: create example
+#  Description: example for dsac-t + humanoidconti + mlp + offserial
+#  Update Date: 2024-12-27, Wenxuan Wang: create example
 
 import argparse
 
@@ -28,13 +28,19 @@ if __name__ == "__main__":
 
     ################################################
     # Key Parameters for users
-    parser.add_argument("--env_id", type=str, default="gym_ant", help="id of environment")
-    parser.add_argument("--algorithm", type=str, default="DSAC", help="RL algorithm")
+    parser.add_argument("--env_id", type=str, default="gym_humanoid", help="id of environment") #gym_halfcheetah
+    parser.add_argument("--algorithm", type=str, default="DSACTMinus", help="RL algorithm")
     parser.add_argument("--enable_cuda", default=True, help="Enable CUDA")
     parser.add_argument("--seed", default=1234, help="Global seed")
+    parser.add_argument("--stop", default=0.5, help="stop")
+    parser.add_argument("--beta_init", default=0.05, help="beta_init")
+    parser.add_argument("--use_avg", default=False, help="use_avg")
     ################################################
     # 1. Parameters for environment
-    parser.add_argument("--reward_scale", type=float, default=1, help="reward scale factor")
+    parser.add_argument("--vector_env_num", type=int, default=20, help="Number of vector envs")
+    parser.add_argument("--vector_env_type", type=str, default='async', help="Options: sync/async")
+    parser.add_argument("--gym2gymnasium", type=bool, default=True, help="Convert Gym-style env to Gymsnaium-style")
+    parser.add_argument("--reward_scale", type=float, default=1.0, help="reward scale factor")
     parser.add_argument("--is_render", type=bool, default=False, help="Draw environment animation")
     parser.add_argument("--is_adversary", type=bool, default=False, help="Adversary training")
 
@@ -75,6 +81,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--policy_hidden_activation", type=str, default="gelu", help="Options: relu/gelu/elu/selu/sigmoid/tanh"
     )
+    parser.add_argument(
+        "--policy_output_activation", type=str, default="linear", help="Options: linear/tanh"
+    )
     parser.add_argument("--policy_min_log_std", type=int, default=-20)
     parser.add_argument("--policy_max_log_std", type=int, default=0.5)
 
@@ -88,18 +97,17 @@ if __name__ == "__main__":
     parser.add_argument("--tau", type=float, default=0.005)
     parser.add_argument("--auto_alpha", type=bool, default=True)
     parser.add_argument("--delay_update", type=int, default=2)
-    parser.add_argument("--bound", default=True)
 
     ################################################
     # 4. Parameters for trainer
     parser.add_argument(
         "--trainer",
         type=str,
-        default="off_serial_trainer",
+        default="off_serial_DSACT_trainer",
         help="Options: on_serial_trainer, on_sync_trainer, off_serial_trainer, off_async_trainer",
     )
     # Maximum iteration number
-    parser.add_argument("--max_iteration", type=int, default=1500000)
+    parser.add_argument("--max_iteration", type=int, default=2500000)
     parser.add_argument(
         "--ini_network_dir",
         type=str,
@@ -130,7 +138,7 @@ if __name__ == "__main__":
 
     ################################################
     # 6. Parameters for evaluator
-    parser.add_argument("--evaluator_name", type=str, default="evaluator")
+    parser.add_argument("--evaluator_name", type=str, default="evaluator_exp")
     parser.add_argument("--num_eval_episode", type=int, default=10)
     parser.add_argument("--eval_interval", type=int, default=2500)
     parser.add_argument("--eval_save", type=str, default=False, help="save evaluation data")
@@ -146,7 +154,7 @@ if __name__ == "__main__":
     ################################################
     # Get parameter dictionary
     args = vars(parser.parse_args())
-    env = create_env(**args)
+    env = create_env(**{**args, "vector_env_num": None})
     args = init_args(env, **args)
 
     start_tensorboard(args["save_folder"])

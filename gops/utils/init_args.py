@@ -29,7 +29,7 @@ def init_args(env, **args):
     num_threads_main = args.get("num_threads_main", None)
     if num_threads_main is None:
         if "serial" in args["trainer"]:
-            num_threads_main = 4
+            num_threads_main = 1
         else:
             num_threads_main = 1
     torch.set_num_threads(num_threads_main)
@@ -38,13 +38,22 @@ def init_args(env, **args):
 
     # cuda
     if args["enable_cuda"]:
+        print("hi!")
         if torch.cuda.is_available():
             args["use_gpu"] = True
+            # Print GPU information
+            print(f"CUDA version: {torch.version.cuda}")
+            print(f"Number of available GPUs: {torch.cuda.device_count()}")
+            for i in range(torch.cuda.device_count()):
+                print(f"GPU {i} name: {torch.cuda.get_device_name(i)}")
+                print(f"GPU {i} total memory: {torch.cuda.get_device_properties(i).total_memory / (1024 ** 3):.2f} GB")
         else:
+            print("fuck!")
             warning_msg = "cuda is not available, use CPU instead"
             warnings.warn(warning_msg)
             args["use_gpu"] = False
     else:
+        print("shit!")
         args["use_gpu"] = False
 
     # sampler
@@ -108,11 +117,69 @@ def init_args(env, **args):
         dir_path = os.path.dirname(__file__)
         dir_path = os.path.dirname(dir_path)
         dir_path = os.path.dirname(dir_path)
-        args["save_folder"] = os.path.join(
-            dir_path + "/results/",args["env_id"],
-            args["algorithm"] +'_'+
-            datetime.datetime.now().strftime("%y%m%d-%H%M%S"),
-        )
+        if args["algorithm"] in ["DSACTMinus", "DSACTMap"]:
+            args["save_folder"] = os.path.join(
+                dir_path + "/results/",args["env_id"],
+                args["algorithm"] + f'-{args["beta_init"]}-{args["stop"]}-{args["seed"]}' + '_' +
+                datetime.datetime.now().strftime("%y%m%d-%H%M%S"),
+            )
+        elif args["algorithm"] in ["DSACTAb", "DSACTAbSort", "DSACTMs"]:
+            args["save_folder"] = os.path.join(
+                dir_path + "/results/",args["env_id"],
+                args["algorithm"] + f'-{args["num_samples"]}-{args["seed"]}' + '_' +
+                datetime.datetime.now().strftime("%y%m%d-%H%M%S"),
+            )
+        elif args["algorithm"] in ["DSACTAutoMinus", "DSACTAutoMap", "DSACU", "DSACUTry", 
+                                   "DSACU2", "DSACU3", "DSACU3Abl", "DSACU3Try", "DSACU4",
+                                   "DSACU5", "DSACU6", "DSACUPRO", "DSACU3PI", "DSACU3Openloop"]:
+            args["save_folder"] = os.path.join(
+                dir_path + "/results/",args["env_id"],
+                args["algorithm"] + f'-{args["beta"]}-{args["beta_learning_rate"]}' +
+                f'-{args["seed"]}' + '_' +
+                datetime.datetime.now().strftime("%y%m%d-%H%M%S"),
+            )
+        elif args["algorithm"] in ["DSACU3SCALE", "DSACU3SCALETry"]:
+            args["save_folder"] = os.path.join(
+                dir_path + "/results/",args["env_id"],
+                args["algorithm"] + f'-{args["num_q"]}-{args["vector_env_num"]}' +
+                f'-{args["lambda_lower"] if not args["auto_lambda"] else "auto_lambda"}' +
+                f'-{args["beta"]}-{args["beta_learning_rate"]}-{args["share_target"]}' +
+                f'-{args["seed"]}' + '_' +
+                datetime.datetime.now().strftime("%y%m%d-%H%M%S"),
+            )
+        elif args["algorithm"] in ["DSACU3SCALEPro", "DSACU3SCALEPro2", "DSACU3SCALEPro3", "DSACU3SCALEPlus"]:
+            args["save_folder"] = os.path.join(
+                dir_path + "/results/",args["env_id"],
+                args["algorithm"] + f'-{args["num_q"]}-{args["vector_env_num"]}-{args["lambda_lower"]}-{args["lambda_upper"]}' +
+                f'-{args["beta"]}-{args["beta_learning_rate"]}-{args["share_target"]}-{args["mix_mode"]}-{args["seed"]}' + '_' +
+                datetime.datetime.now().strftime("%y%m%d-%H%M%S"),
+            )
+        elif args["algorithm"] in ["DSACU3SCALEAbl"]:
+            args["save_folder"] = os.path.join(
+                dir_path + "/results/",args["env_id"],
+                args["algorithm"] + f'-{args["num_q"]}' +
+                f'-{args["seed"]}' + '_' +
+                datetime.datetime.now().strftime("%y%m%d-%H%M%S"),
+            )
+        elif args["algorithm"] in ["DSACTClosedMinus"]:
+            args["save_folder"] = os.path.join(
+                dir_path + "/results/",args["env_id"],
+                args["algorithm"] +
+                f'-{args["oe_std_factor"]}-{args["seed"]}' + '_' +
+                datetime.datetime.now().strftime("%y%m%d-%H%M%S"),
+            )
+        elif args["algorithm"].startswith("DSACTMinusa"):
+            args["save_folder"] = os.path.join(
+                dir_path + "/results/",args["env_id"],
+                args["algorithm"] + f'-{args["beta_init"]}' + '_' +
+                datetime.datetime.now().strftime("%y%m%d-%H%M%S"),
+            )
+        else:
+            args["save_folder"] = os.path.join(
+                dir_path + "/results/",args["env_id"],
+                args["algorithm"] + f'-{args["seed"]}' +'_'+
+                datetime.datetime.now().strftime("%y%m%d-%H%M%S"),
+            )
     os.makedirs(args["save_folder"], exist_ok=True)
     os.makedirs(args["save_folder"] + "/apprfunc", exist_ok=True)
     os.makedirs(args["save_folder"] + "/evaluator", exist_ok=True)

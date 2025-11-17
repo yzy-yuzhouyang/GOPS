@@ -30,14 +30,14 @@ if __name__ == "__main__":
     # Key Parameters for users
     parser.add_argument("--env_id", type=str, default="gym_humanoid", help="id of environment")
     parser.add_argument("--algorithm", type=str, default="DSACT", help="RL algorithm")
-    parser.add_argument("--enable_cuda", default=False, help="Enable CUDA")
+    parser.add_argument("--enable_cuda", default=True, help="Enable CUDA")
     parser.add_argument("--seed", default=12345, help="Global seed")
     ################################################
     # 1. Parameters for environment
     parser.add_argument("--vector_env_num", type=int, default=4, help="Number of vector envs")
     parser.add_argument("--vector_env_type", type=str, default='async', help="Options: sync/async")
     parser.add_argument("--gym2gymnasium", type=bool, default=True, help="Convert Gym-style env to Gymsnaium-style")
-    parser.add_argument("--reward_scale", type=float, default=1.0, help="reward scale factor")
+    parser.add_argument("--reward_scale", type=float, default=0.1, help="reward scale factor")
     parser.add_argument("--is_render", type=bool, default=False, help="Draw environment animation")
     parser.add_argument("--is_adversary", type=bool, default=False, help="Adversary training")
 
@@ -100,11 +100,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--trainer",
         type=str,
-        default="off_serial_trainer",
+        default="off_serial_DSACT_trainer",
         help="Options: on_serial_trainer, on_sync_trainer, off_serial_trainer, off_async_trainer",
     )
     # Maximum iteration number
-    parser.add_argument("--max_iteration", type=int, default=1500000)
+    parser.add_argument("--max_iteration", type=int, default=2500000)
     parser.add_argument(
         "--ini_network_dir",
         type=str,
@@ -135,7 +135,7 @@ if __name__ == "__main__":
 
     ################################################
     # 6. Parameters for evaluator
-    parser.add_argument("--evaluator_name", type=str, default="evaluator")
+    parser.add_argument("--evaluator_name", type=str, default="evaluator_exp")
     parser.add_argument("--num_eval_episode", type=int, default=10)
     parser.add_argument("--eval_interval", type=int, default=2500)
     parser.add_argument("--eval_save", type=str, default=False, help="save evaluation data")
@@ -151,7 +151,7 @@ if __name__ == "__main__":
     ################################################
     # Get parameter dictionary
     args = vars(parser.parse_args())
-    env = create_env(**{**args, "vector_env_num": None})
+    env = create_env(**{**args, "vector_env_num": None, "action_scale": False})
     args = init_args(env, **args)
 
     start_tensorboard(args["save_folder"])

@@ -27,7 +27,7 @@ from gops.utils.tensorboard_setup import add_scalars, tb_tags
 from gops.utils.log_data import LogData
 
 
-class OffSerialTrainer:
+class OffSerialDSACTTrainer:
     def __init__(self, alg, sampler, buffer, evaluator, **kwargs):
         self.alg = alg
         self.sampler = sampler
@@ -124,6 +124,10 @@ class OffSerialTrainer:
                 total_avg_return = avg_tb_eval_dict['total_avg_return']
                 real_Q = avg_tb_eval_dict['real_Q']
                 output_Q = avg_tb_eval_dict['output_Q']
+                Q_diff_mean = avg_tb_eval_dict["Q_diff_mean"]
+                std_diff_mean = avg_tb_eval_dict["std_diff_mean"]
+                Q_rel_diff_mean = avg_tb_eval_dict["Q_rel_diff_mean"]
+                std_rel_diff_mean = avg_tb_eval_dict["std_rel_diff_mean"]
                 Q_bias_mean = avg_tb_eval_dict['Q_bias_mean']
                 Q_bias_std = avg_tb_eval_dict['Q_bias_std']
                 Episode_len = avg_tb_eval_dict['Episode_len']
@@ -178,6 +182,26 @@ class OffSerialTrainer:
                 self.writer.add_scalar(
                     tb_tags["Output Q"],
                     output_Q,
+                    self.iteration
+                )
+                self.writer.add_scalar(
+                    tb_tags["Q diff mean"],
+                    Q_diff_mean,
+                    self.iteration
+                )
+                self.writer.add_scalar(
+                    tb_tags["std diff mean"],
+                    std_diff_mean,
+                    self.iteration
+                )
+                self.writer.add_scalar(
+                    tb_tags["Q rel diff mean"],
+                    Q_rel_diff_mean,
+                    self.iteration
+                )
+                self.writer.add_scalar(
+                    tb_tags["std rel diff mean"],
+                    std_rel_diff_mean,
                     self.iteration
                 )
                 self.writer.add_scalar(
