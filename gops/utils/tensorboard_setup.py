@@ -165,7 +165,7 @@ tb_tags = {
     "relative_std_output_sigma":"Evaluation/10. relative_std_output_sigma",
     "mean_q_bias": "Evaluation/11. mean_q_bias",
     "std_q_bias": "Evaluation/12. std_q_bias",
-    "episode length": "Evaluation/13. episode length",
+    "episode_length": "Evaluation/13. episode_length",
     "overestiamtion_ratio": "Evaluation/10. overestiamtion_ratio",
     "Buffer RAM of RL iteration": "RAM/RAM [MB]-RL iter",
     "loss_actor": "Loss/Actor loss-RL iter",

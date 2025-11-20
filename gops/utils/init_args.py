@@ -113,9 +113,9 @@ def init_args(env, **args):
                 f'-{args["beta"]}' + \
                 f'-{args["lambda_lower"]}' + \
                 f'-{args["lambda_upper"]}' + \
-                f'-{args["mix_mode"]}' + \
-                '-auto_lambda' if args["auto_lambda"] else '' \
-                '-share_target' if args["share_target"] else ''
+                f'-{args["mix_mode"]}'
+            config_string += '-auto_lambda' if args["auto_lambda"] else ''
+            config_string += '-share_target' if args["share_target"] else ''
             args["save_folder"] = os.path.join(
                 dir_path + "/results/",args["env_id"],
                 args["algorithm"] + f'-{args["seed"]}' + config_string + '_'+

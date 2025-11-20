@@ -43,6 +43,7 @@ class ApproxContainer(ApprBase):
         q_args = get_apprfunc_dict("value", **kwargs)
         self.num_q = kwargs["num_q"]
         self.beta_init = kwargs['beta']
+        self.lambda_upper = kwargs['lambda_upper']
         
         for i in range(self.num_q):  
             q_name = f"q{i+1}"
@@ -512,7 +513,8 @@ class DSACU(AlgorithmBase):
 
         if iteration % self.delay_update == 0:
             self.networks.policy_optimizer.step()
-            self.networks.behavior_policy_optimizer.step()
+            if self.lambda_upper:
+                self.networks.behavior_policy_optimizer.step()
 
             if self.auto_alpha:
                 self.networks.alpha_optimizer.step()
