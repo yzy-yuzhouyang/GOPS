@@ -108,11 +108,25 @@ def init_args(env, **args):
         dir_path = os.path.dirname(__file__)
         dir_path = os.path.dirname(dir_path)
         dir_path = os.path.dirname(dir_path)
-        args["save_folder"] = os.path.join(
-            dir_path + "/results/",args["env_id"],
-            args["algorithm"] + f'-{args["seed"]}' +'_'+
-            datetime.datetime.now().strftime("%y%m%d-%H%M%S"),
-        )
+        if args["algorithm"] in ["DSACU"]:
+            config_string = f'-{args["num_q"]}' + \
+                f'-{args["beta"]}' + \
+                f'-{args["lambda_lower"]}' + \
+                f'-{args["lambda_upper"]}' + \
+                f'-{args["mix_mode"]}' + \
+                '-auto_lambda' if args["auto_lambda"] else '' \
+                '-share_target' if args["share_target"] else ''
+            args["save_folder"] = os.path.join(
+                dir_path + "/results/",args["env_id"],
+                args["algorithm"] + f'-{args["seed"]}' + config_string + '_'+
+                datetime.datetime.now().strftime("%y%m%d-%H%M%S"),
+            )
+        else:
+            args["save_folder"] = os.path.join(
+                dir_path + "/results/",args["env_id"],
+                args["algorithm"] + f'-{args["seed"]}' +'_'+
+                datetime.datetime.now().strftime("%y%m%d-%H%M%S"),
+            )
     os.makedirs(args["save_folder"], exist_ok=True)
     os.makedirs(args["save_folder"] + "/apprfunc", exist_ok=True)
     os.makedirs(args["save_folder"] + "/evaluator", exist_ok=True)

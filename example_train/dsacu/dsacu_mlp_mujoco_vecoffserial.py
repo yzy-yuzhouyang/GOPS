@@ -31,16 +31,14 @@ if __name__ == "__main__":
     parser.add_argument("--env_id", type=str, default="gym_humanoid", help="id of environment") #gym_halfcheetah
     parser.add_argument("--algorithm", type=str, default="DSACU", help="RL algorithm")
     parser.add_argument("--enable_cuda", default=True, help="Enable CUDA")
-    parser.add_argument("--seed", default=22345, help="Global seed")
-    parser.add_argument("--stop", default=0.7, help="stop")
-    parser.add_argument("--beta", default=0.2, help="beta")
-    parser.add_argument("--oe_std_factor", default=0.0, help="oe_std_factor")
+    parser.add_argument("--seed", default=12345, help="Global seed")
     parser.add_argument("--num_q", default=4, help="num_q")
+    parser.add_argument("--beta", default=0.2, help="beta")
     parser.add_argument("--lambda_lower", default=1.0, help="lambda_lower")
     parser.add_argument("--lambda_upper", default=0.5, help="lambda_upper")
+    parser.add_argument("--mix_mode", default="default", help="mix_policy")
     parser.add_argument("--auto_lambda", default=False, help="auto_lambda")
     parser.add_argument("--share_target", default=False, help="share_target")
-    parser.add_argument("--mix_mode", default="no", help="mix_policy")
     ################################################
     # 1. Parameters for environment
     parser.add_argument("--vector_env_num", type=int, default=4, help="Number of vector envs")
@@ -145,7 +143,7 @@ if __name__ == "__main__":
 
     ################################################
     # 6. Parameters for evaluator
-    parser.add_argument("--evaluator_name", type=str, default="evaluator_scale")
+    parser.add_argument("--evaluator_name", type=str, default="evaluator_dsacu")
     parser.add_argument("--num_eval_episode", type=int, default=10)
     parser.add_argument("--eval_interval", type=int, default=2500)
     parser.add_argument("--eval_save", type=str, default=False, help="save evaluation data")

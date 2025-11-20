@@ -106,7 +106,7 @@ class OffSerialDsacuTrainer:
                         else:
                             self.sampler.use_target_policy = False
 
-                    elif self.mix_mode == "no":
+                    elif self.mix_mode == "default":
                         self.sampler.use_target_policy = False
 
                     else:

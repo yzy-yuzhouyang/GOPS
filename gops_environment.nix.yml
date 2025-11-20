@@ -4,7 +4,7 @@ channels:
   - defaults
 
 dependencies:
-  - python=3.8
+  - python=3.9
   - pytorch::pytorch>=1.13.0
   - pytorch::torchvision>=0.14.0
   - pytorch::torchaudio>=0.13.0
