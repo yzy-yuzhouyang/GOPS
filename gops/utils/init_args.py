@@ -116,6 +116,7 @@ def init_args(env, **args):
                 f'-{args["mix_mode"]}'
             config_string += '-auto_lambda' if args["auto_lambda"] else ''
             config_string += '-share_target' if args["share_target"] else ''
+            config_string += '-entropy_scale' if args["entropy_scale_ratio"] != 1.0 else ''
             args["save_folder"] = os.path.join(
                 dir_path + "/results/",args["env_id"],
                 args["algorithm"] + f'-{args["seed"]}' + config_string + '_'+

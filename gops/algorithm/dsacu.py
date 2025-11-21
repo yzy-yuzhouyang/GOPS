@@ -124,7 +124,7 @@ class DSACU(AlgorithmBase):
         self.tau = tau
         self.auto_alpha = auto_alpha
         if target_entropy is None:
-            target_entropy = -kwargs["action_dim"]
+            target_entropy = -kwargs["entropy_scale_ratio"] * kwargs["action_dim"]
         self.target_entropy = target_entropy
         self.delay_update = delay_update
         self.mean_stds = [None] * self.networks.num_q
@@ -154,7 +154,8 @@ class DSACU(AlgorithmBase):
             update_beta: bool, 
             overestimation: float
         ) -> dict:
-        update_beta = False if overestimation > 0 else True
+        if overestimation > 0:
+            update_beta = False
         tb_info = self._compute_gradient(data, iteration, update_beta, overestimation)
         self._update(iteration, update_beta)
         return tb_info
