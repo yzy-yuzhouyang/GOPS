@@ -39,6 +39,7 @@ if __name__ == "__main__":
     parser.add_argument("--mix_mode", default="default", help="mix_policy")
     parser.add_argument("--auto_lambda", default=False, help="auto_lambda")
     parser.add_argument("--share_target", default=False, help="share_target")
+    parser.add_argument("--entropy_scale_ratio", default=10.0, help="entropy_scale_ratio")
     ################################################
     # 1. Parameters for environment
     parser.add_argument("--vector_env_num", type=int, default=4, help="Number of vector envs")
