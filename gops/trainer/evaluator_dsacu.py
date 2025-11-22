@@ -182,7 +182,7 @@ class EvaluatorDsacu:
         qx_tb_eval_dict['mean_q_bias'] = np.mean(q_bias)  # Mean Q-value bias
         qx_tb_eval_dict['std_q_bias'] = np.std(q_bias)  # Std of Q-value bias
         qx_tb_eval_dict['episode_length'] = len(reward_list)  # Episode length
-        qx_tb_eval_dict['overestiamtion_ratio'] = overestiamtion_ratio  # Overestimation ratio
+        qx_tb_eval_dict['overestimation_ratio'] = overestiamtion_ratio  # Overestimation ratio
 
         return qx_tb_eval_dict
 
