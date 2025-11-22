@@ -127,7 +127,7 @@ class DSACU(AlgorithmBase):
             target_entropy = -kwargs["entropy_scale_ratio"] * kwargs["action_dim"]
         self.target_entropy = target_entropy
         self.delay_update = delay_update
-        self.mean_stds = [None] * self.networks.num_q
+        self.mean_sigmas = [None] * self.networks.num_q
         self.mean_uncertainty = None
         self.mean_rel_u_epi = None
         self.tau_b = kwargs.get("tau_b", self.tau)
@@ -247,7 +247,7 @@ class DSACU(AlgorithmBase):
             q_optimizer = getattr(self.networks, q_optimizer_name)
             q_optimizer.zero_grad()
             
-        loss_q, q_values, q_stds, min_stds = self._compute_loss_q(data)
+        loss_q, avg_qs, avg_sigmas = self._compute_loss_q(data)
         loss_q.backward()
 
         for i in range(self.networks.num_q):
@@ -291,44 +291,38 @@ class DSACU(AlgorithmBase):
             "DSAC2/entropy-RL iter": entropy.item(),
             "DSAC2/alpha-RL iter": self._get_alpha(),
             "DSAC2/beta-RL iter": self._get_beta(),
-            "DSAC2/mean_stds": sum(self.mean_stds) / self.networks.num_q if all(std is not None for std in self.mean_stds) else 0,
+            "DSAC2/mean_sigmas": sum(self.mean_sigmas) / self.networks.num_q if all(std is not None for std in self.mean_sigmas) else 0,
             tb_tags["alg_time"]: (time.time() - start_time) * 1000,
         }
         
-        q_values_tensor = torch.tensor(q_values)
-        q_stds_tensor = torch.tensor(q_stds)
+        avg_qs_tensor = torch.tensor(avg_qs)
+        avg_sigmas_tensor = torch.tensor(avg_sigmas)
 
         tb_info.update({
-            "DSAC2/critic_avg_q_mean-RL iter": q_values_tensor.mean().item(),
-            "DSAC2/critic_avg_q_std-RL iter": q_values_tensor.std().item(),
-            "DSAC2/critic_avg_q_range-RL iter": (q_values_tensor.max() - q_values_tensor.min()).item(),
+            "DSAC2/critic_mean_q-RL iter": avg_qs_tensor.mean().item(),
+            "DSAC2/critic_std_q-RL iter": avg_qs_tensor.std().item(),
+            "DSAC2/critic_avg_std_mean-RL iter": avg_sigmas_tensor.mean().item(),
+            "DSAC2/critic_avg_std_std-RL iter": avg_sigmas_tensor.std().item(),
         })
 
-        tb_info.update({
-            "DSAC2/critic_avg_std_mean-RL iter": q_stds_tensor.mean().item(),
-            "DSAC2/critic_avg_std_std-RL iter": q_stds_tensor.std().item(),
-            "DSAC2/critic_avg_std_range-RL iter": (q_stds_tensor.max() - q_stds_tensor.min()).item(),
-        })
-
-        valid_mean_stds = [std for std in self.mean_stds if std is not None]
-        if valid_mean_stds:
-            mean_stds_tensor = torch.tensor(valid_mean_stds)
+        valid_mean_sigmas = [sigma for sigma in self.mean_sigmas if sigma is not None]
+        if valid_mean_sigmas:
+            mean_sigmas_tensor = torch.tensor(valid_mean_sigmas)
             tb_info.update({
-                "DSAC2/mean_std_mean": mean_stds_tensor.mean().item(),
-                "DSAC2/mean_std_std": mean_stds_tensor.std().item(),
-                "DSAC2/mean_std_range": (mean_stds_tensor.max() - mean_stds_tensor.min()).item(),
+                "DSAC2/mean_mean_sigma": mean_sigmas_tensor.mean().item(),
+                "DSAC2/std_mean_sigma": mean_sigmas_tensor.std().item(),
             })
 
         return tb_info
 
     def _q_evaluate(self, obs, act, qnet):
         StochaQ = qnet(obs, act)
-        mean, std = StochaQ[..., 0], StochaQ[..., -1]
-        normal = Normal(torch.zeros_like(mean), torch.ones_like(std))
-        z = normal.sample()
-        z = torch.clamp(z, -3, 3)
-        q_value = mean + torch.mul(z, std)
-        return mean, std, q_value
+        qs, sigmas = StochaQ[..., 0], StochaQ[..., -1]
+        normal = Normal(torch.zeros_like(qs), torch.ones_like(sigmas))
+        noise = normal.sample()
+        noise = torch.clamp(noise, -3, 3)
+        zs = qs + torch.mul(noise, sigmas)
+        return qs, sigmas, zs
 
     def _compute_loss_q(self, data: DataDict):
         obs, act, rew, obs2, done = (
@@ -342,46 +336,47 @@ class DSACU(AlgorithmBase):
         act2_dist = self.networks.create_action_distributions(logits_2)
         act2, log_prob_act2 = act2_dist.rsample()
 
-        q_means = []
-        q_stds = []
-        q_samples = []
+        qs = []
+        sigmas = []
+        zs = []
         
         for i in range(self.networks.num_q):
             q_name = f"q{i+1}"
             q_network = getattr(self.networks, q_name)
-            q_mean, q_std, q_sample = self._q_evaluate(obs, act, q_network)
-            q_means.append(q_mean)
-            q_stds.append(q_std)
-            q_samples.append(q_sample)
+            q, sigma, z = self._q_evaluate(obs, act, q_network)
+            qs.append(q)
+            sigmas.append(sigma)
+            zs.append(z)
             
-            if self.mean_stds[i] is None:
-                self.mean_stds[i] = torch.mean(q_std.detach())
+            if self.mean_sigmas[i] is None:
+                self.mean_sigmas[i] = torch.mean(sigma.detach())
             else:
-                self.mean_stds[i] = (1 - self.tau_b) * self.mean_stds[i] + self.tau_b * torch.mean(q_std.detach())
+                self.mean_sigmas[i] = (1 - self.tau_b) * self.mean_sigmas[i] + \
+                    self.tau_b * torch.mean(sigma.detach())
 
         with torch.no_grad():
-            q_next_means = []
-            q_next_stds = []
-            q_next_samples = []
+            qs_next = []
+            sigmas_next = []
+            zs_next = []
             
             for i in range(self.networks.num_q):
                 q_target_name = f"q{i+1}_target"
                 q_target_network = getattr(self.networks, q_target_name)
-                q_next_mean, q_next_std, q_next_sample = self._q_evaluate(
+                q_next, sigma_next, z_next = self._q_evaluate(
                     obs2, act2, q_target_network
                 )
-                q_next_means.append(q_next_mean)
-                q_next_stds.append(q_next_std)
-                q_next_samples.append(q_next_sample)
+                qs_next.append(q_next)
+                sigmas_next.append(sigma_next)
+                zs_next.append(z_next)
 
-            q_next_all = torch.stack(q_next_means)
-            u_epistemic = torch.var(q_next_all, dim=0)
-            q_next_stds_all = torch.stack(q_next_stds)
-            u_aleatoric = torch.mean(q_next_stds_all ** 2, dim=0)
+            qs_next_tensor = torch.stack(qs_next)
+            u_epistemic = torch.var(qs_next_tensor, dim=0)
+            sigmas_next_tensor = torch.stack(sigmas_next)
+            u_aleatoric = torch.mean(sigmas_next_tensor ** 2, dim=0)
             
             factor_aleatoric = (self._get_beta() / self.lambda_lower) ** 2
             uncertainty = torch.sqrt(torch.clip(u_epistemic + factor_aleatoric * u_aleatoric, min=1e-8))
-            q_next = torch.mean(q_next_all, dim=0) - self.lambda_lower * uncertainty
+            target_q_next = torch.mean(qs_next_tensor, dim=0) - self.lambda_lower * uncertainty
 
             if self.mean_uncertainty is None:
                 self.mean_uncertainty = self.lambda_lower * torch.mean(uncertainty.detach())
@@ -390,98 +385,95 @@ class DSACU(AlgorithmBase):
                                         self.lambda_lower * self.tau_b * torch.mean(uncertainty.detach())
                 
             if self.share_target:
-                distances = torch.abs(q_next_all - q_next.unsqueeze(0))
+                distances = torch.abs(qs_next_tensor - target_q_next.unsqueeze(0))
                 closest_indices = torch.argmin(distances, dim=0)  # [B]
-                q_next_samples_all = torch.stack(q_next_samples)  # [num_q, B]
-                shared_q_next_sample = q_next_samples_all.gather(
+                zs_next_tensor = torch.stack(zs_next)  # [num_q, B]
+                shared_zs_next = zs_next_tensor.gather(
                     dim=0, 
                     index=closest_indices.unsqueeze(0)
                 ).squeeze(0)
-
-        total_loss = 0
-        q_values = []
-        q_std_values = []
-        min_stds = []
         
         for i in range(self.networks.num_q):
-            target_q, target_q_bound = self._compute_target_q(
+            target_q, target_z_bound = self._compute_target_q(
                 rew,
                 done,
-                q_means[i].detach(),
-                self.mean_stds[i].detach(),
-                q_next.detach(),
-                shared_q_next_sample if self.share_target else q_next_samples[i].detach(),
+                qs[i].detach(),
+                self.mean_sigmas[i].detach(),
+                target_q_next.detach(),
+                shared_zs_next if self.share_target else zs_next[i].detach(),
                 log_prob_act2.detach(),
             )
             
-            q_std_detach = torch.clamp(q_stds[i], min=0.).detach()
+            sigma_detach = torch.clamp(sigmas[i], min=0.).detach()
             bias = 0.1
 
-            q_loss = (torch.pow(self.mean_stds[i], 2) + bias) * torch.mean(
-                -(target_q - q_means[i]).detach() / (torch.pow(q_std_detach, 2) + bias) * q_means[i]
-                - ((torch.pow(q_means[i].detach() - target_q_bound, 2) - q_std_detach.pow(2)) 
-                   / (torch.pow(q_std_detach, 3) + bias)) * q_stds[i]
+            q_loss = (torch.pow(self.mean_sigmas[i], 2) + bias) * torch.mean(
+                -(target_q - qs[i]).detach() / (torch.pow(sigma_detach, 2) + bias) * qs[i]
+                - ((torch.pow(qs[i].detach() - target_z_bound, 2) - sigma_detach.pow(2)) 
+                   / (torch.pow(sigma_detach, 3) + bias)) * sigmas[i]
             )
 
+            total_loss = 0
+            avg_qs = []
+            avg_sigmas = []
             total_loss += q_loss
-            q_values.append(q_means[i].detach().mean())
-            q_std_values.append(q_stds[i].detach().mean())
-            min_stds.append(q_stds[i].min().detach())
+            avg_qs.append(qs[i].detach().mean())
+            avg_sigmas.append(sigmas[i].detach().mean())
 
-        return total_loss, q_values, q_std_values, min_stds
+        return total_loss, avg_qs, avg_sigmas
 
-    def _compute_target_q(self, r, done, q, q_std, q_next, q_next_sample, log_prob_a_next):
+    def _compute_target_q(self, r, done, q, sigma, q_next, z_next, log_prob_a_next):
         target_q = r + (1 - done) * self.gamma * (
             q_next - self._get_alpha() * log_prob_a_next
         )
-        target_q_sample = r + (1 - done) * self.gamma * (
-            q_next_sample - self._get_alpha() * log_prob_a_next
+        target_z = r + (1 - done) * self.gamma * (
+            z_next - self._get_alpha() * log_prob_a_next
         )
-        td_bound = 3 * q_std
-        difference = torch.clamp(target_q_sample - q, -td_bound, td_bound)
-        target_q_bound = q + difference
-        return target_q.detach(), target_q_bound.detach()
+        td_bound = 3 * sigma
+        difference = torch.clamp(target_z - q, -td_bound, td_bound)
+        target_z_bound = q + difference
+        return target_q.detach(), target_z_bound.detach()
 
     def _compute_loss_behavior_policy(self, data: DataDict):
         obs, new_act, new_log_prob = data["obs"], data["new_behavior_act"], data["new_behavior_log_prob"]
         
-        q_values = []
-        q_stds = []
+        qs = []
+        sigmas = []
         for i in range(self.networks.num_q):
             q_name = f"q{i+1}"
             q_network = getattr(self.networks, q_name)
-            q_mean, q_std, _ = self._q_evaluate(obs, new_act, q_network)
-            q_values.append(q_mean)
-            q_stds.append(q_std)
+            q, sigma, _ = self._q_evaluate(obs, new_act, q_network)
+            qs.append(q)
+            sigmas.append(sigma)
         
-        q_all = torch.stack(q_values)
+        q_all = torch.stack(qs)
         u_epistemic = torch.var(q_all, dim=0)
-        q_stds_all = torch.stack(q_stds)
+        q_stds_all = torch.stack(sigmas)
         u_aleatoric = torch.mean(q_stds_all ** 2, dim=0)
 
         factor_aleatoric = (self._get_beta() / self.lambda_upper) ** 2
-        q = torch.mean(q_all, dim=0) + self.lambda_upper * torch.sqrt(
+        target_q = torch.mean(q_all, dim=0) + self.lambda_upper * torch.sqrt(
                 torch.clip(u_epistemic + factor_aleatoric * u_aleatoric, min=1e-8)
             )
 
-        loss_policy = (self._get_alpha() * new_log_prob - q).mean()
+        loss_policy = (self._get_alpha() * new_log_prob - target_q).mean()
         return loss_policy
     
     def _compute_loss_policy(self, data: DataDict):
         obs, new_act, new_log_prob = data["obs"], data["new_act"], data["new_log_prob"]
         
-        q_values = []
+        qs = []
         for i in range(self.networks.num_q):
             q_name = f"q{i+1}"
             q_network = getattr(self.networks, q_name)
-            q_mean, _, _ = self._q_evaluate(obs, new_act, q_network)
-            q_values.append(q_mean)
+            q, _, _ = self._q_evaluate(obs, new_act, q_network)
+            qs.append(q)
         
-        u_epistemic = torch.var(torch.stack(q_values), dim=0)
-        q = torch.mean(torch.stack(q_values), dim=0) - \
+        u_epistemic = torch.var(torch.stack(qs), dim=0)
+        target_q = torch.mean(torch.stack(qs), dim=0) - \
             self.lambda_lower * torch.sqrt(torch.clamp(u_epistemic, min=1e-8))
 
-        loss_policy = (self._get_alpha() * new_log_prob - q).mean()
+        loss_policy = (self._get_alpha() * new_log_prob - target_q).mean()
         entropy = -new_log_prob.detach().mean()
         return loss_policy, entropy
 
