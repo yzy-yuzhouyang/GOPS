@@ -60,7 +60,15 @@ class Evaluator:
             action_distribution = self.networks.create_action_distributions(logits)
             action = action_distribution.mode()
             action = action.detach().numpy()[0]
-            next_obs, reward, done, next_info = self.env.step(action)
+            
+            out = self.env.step(action)
+            import gymnasium
+            if isinstance(self.env.action_space, gymnasium.spaces.Space):
+                next_obs, reward, te, tr, next_info = out
+                done = te or tr
+            else:
+                next_obs, reward, done, next_info = out
+
             obs_list.append(obs)
             action_list.append(action)
             obs = next_obs
