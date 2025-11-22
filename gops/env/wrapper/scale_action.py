@@ -28,7 +28,11 @@ class ScaleActionData(ActionWrapper):
 
         self.min_action = np.zeros_like(env.action_space.low) + min_action
         self.max_action = np.zeros_like(env.action_space.high) + max_action
-        self.action_space = gym.spaces.Box(low=self.min_action, high=self.max_action)
+        import gymnasium
+        if isinstance(self.env.action_space, gymnasium.spaces.Space):
+            self.action_space = gymnasium.spaces.Box(low=self.min_action, high=self.max_action)
+        else:
+            self.action_space = gym.spaces.Box(low=self.min_action, high=self.max_action)
 
     def action(self, action: np.ndarray) -> np.ndarray:
         action = np.clip(action, self.min_action, self.max_action)

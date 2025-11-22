@@ -73,7 +73,15 @@ class EvaluatorDsacu:
             log_prob = action_distribution.log_prob(action)
             action = action.cpu().detach().numpy()[0]
             log_prob = log_prob.cpu().detach().numpy()[0]
-            next_obs, reward, done, next_info = self.env.step(action)
+            
+            out = self.env.step(action)
+            import gymnasium
+            if isinstance(self.env.action_space, gymnasium.spaces.Space):
+                next_obs, reward, te, tr, next_info = out
+                done = te or tr
+            else:
+                next_obs, reward, done, next_info = out
+
             obs_list.append(obs)
             action_list.append(action)
             log_prob_list.append(log_prob)

@@ -52,8 +52,16 @@ class Gym2Gymnasium(gym.Wrapper, GymnasiumEnv):
                     f"Unsupported gym space type: {type(space)}"
                 )
 
-        self.observation_space = convert_gym_space(self.env.observation_space)
-        self.action_space = convert_gym_space(self.env.action_space)
+        # check whethor the space is already converted
+        if isinstance(self.env.observation_space, gymnasium.spaces.Space):
+            self.observation_space = self.env.observation_space
+        else:
+            self.observation_space = convert_gym_space(self.env.observation_space)
+            
+        if isinstance(self.env.action_space, gymnasium.spaces.Space):
+            self.action_space = self.env.action_space
+        else:
+            self.action_space = convert_gym_space(self.env.action_space)
     
     def step(self, action):
         observation, reward, done, info = self.env.step(action)

@@ -16,6 +16,7 @@ from __future__ import annotations
 from typing import Tuple, Union
 
 import gym
+import gymnasium
 import torch
 
 from gops.env.env_ocp.env_model.pyth_base_model import PythBaseModel
@@ -44,10 +45,19 @@ class ShapingRewardData(gym.Wrapper):
         self.reward_scale = reward_scale
 
     def step(self, action: ActType) -> Tuple[ObsType, float, bool, dict]:
-        obs, r, d, info = self.env.step(action)
-        r_scaled = (r + self.reward_shift) * self.reward_scale
-        info["raw_reward"] = r
-        return obs, r_scaled, d, info
+        # obs, r, d, info = self.env.step(action)
+        out = self.env.step(action)
+        import gymnasium
+        if isinstance(self.env.action_space, gymnasium.spaces.Space):
+            obs, r, te, tr, info = out
+            r_scaled = (r + self.reward_shift) * self.reward_scale
+            info["raw_reward"] = r
+            return obs, r_scaled, te, tr, info
+        else:
+            obs, r, d, info = out
+            r_scaled = (r + self.reward_shift) * self.reward_scale
+            info["raw_reward"] = r
+            return obs, r_scaled, d, info
 
 
 class ShapingRewardModel(ModelWrapper):

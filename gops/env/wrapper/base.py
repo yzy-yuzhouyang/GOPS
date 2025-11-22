@@ -59,9 +59,17 @@ class ModelWrapper:
 class ActionWrapper(gym.ActionWrapper):
     def step(self, action):
         raw_action = self.action(action)
-        next_obs, reward, done, info = self.env.step(raw_action)
-        info["raw_action"] = raw_action
-        return next_obs, reward, done, info
+        # next_obs, reward, done, info = self.env.step(raw_action)
+        out = self.env.step(raw_action)
+        import gymnasium
+        if isinstance(self.env.action_space, gymnasium.spaces.Space):
+            next_obs, reward, te, tr, info = out
+            info["raw_action"] = raw_action
+            return next_obs, reward, te, tr, info
+        else:
+            next_obs, reward, done, info = out
+            info["raw_action"] = raw_action
+            return next_obs, reward, done, info
 
 
 class ActionModelWrapper(ModelWrapper):

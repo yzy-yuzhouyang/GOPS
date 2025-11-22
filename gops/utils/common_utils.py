@@ -224,16 +224,25 @@ def set_seed(trainer_name, seed, offset, env=None):
         random seed for subprocess, gym env which random seed is set
     """
 
+    def seed_env(seed: int):
+        try:
+            env.reset(seed=seed)
+            env.action_space.seed(seed=seed)
+        except:
+            env.seed(seed)
+
     if trainer_name.split("_")[1] in ["async", "sync"]:
         print("Setting seed of a subprocess to {}".format(seed + offset))
         seed_everything(seed + offset)
         if env is not None:
-            env.seed(seed + offset)
+            # env.seed(seed + offset)
+            seed_env(seed = seed + offset)
         return seed + offset, env
 
     else:
         if env is not None:
-            env.seed(seed)
+            # env.seed(seed)
+            seed_env(seed)
         return None, env
 
 

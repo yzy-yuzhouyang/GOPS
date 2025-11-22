@@ -29,6 +29,7 @@ from gops.env.wrapper.scale_action import ScaleActionData
 from gops.env.wrapper.scale_observation import ScaleObservationData
 from gops.env.wrapper.shaping_reward import ShapingRewardData
 from gops.env.wrapper.unify_state import StateData
+from gops.env.wrapper.tensor import TensorWrapper
 from gops.utils.gops_path import env_path, underline2camel
 
 
@@ -94,6 +95,7 @@ def create_env(
     min_action: Union[float, int, np.ndarray, list] = -1.0,
     max_action: Union[float, int, np.ndarray, list] = 1.0,
     gym2gymnasium: bool = False,
+    tensor_env: bool = False,
     **kwargs,
 ) -> object:
     """Automatically wrap data type environment according to input arguments. Wrapper will not be used
@@ -132,6 +134,23 @@ def create_env(
 
     def env_fn():
         env = env_creator(**_kwargs)
+        if hasattr(env, "action_space"):
+            if isinstance(env.action_space, gymnasium.spaces.Space):
+                print('#'*50)
+                print("Create gymnasium environment")
+
+                if reward_scale is not None:
+                    _reward_scale = 1.0 if reward_scale is None else reward_scale
+                    _reward_shift = 0.0 if reward_shift is None else reward_shift
+                    env = ShapingRewardData(env, _reward_shift, _reward_scale)
+
+                if action_scale and isinstance(
+                    env.action_space, (gym.spaces.Box, gymnasium.spaces.Box)):
+                    env = ScaleActionData(env, min_action, max_action)
+                
+                if tensor_env:
+                    env = TensorWrapper(env, reward_scale)
+                return env
 
         env = ResetInfoData(env)
 
