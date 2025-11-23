@@ -54,7 +54,7 @@ class OffSerialDsacuTrainer:
         self.iteration = 0
         self.overestimation = 0
         self.update_beta = False
-        self.early_stage_flag = kwargs["enable_early_beta_adjustment"]
+        self.early_stage_flag = kwargs["freeze_early_beta"]
         self.use_optimistic_behavior_policy = kwargs["lambda_upper"]
         self.mix_mode = kwargs["mix_mode"]
 
