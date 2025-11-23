@@ -22,6 +22,7 @@ from typing import Any, Optional, Tuple
 
 import torch
 import torch.nn as nn
+from torch.nn.functional import huber_loss
 from torch.distributions import Normal
 from torch.optim import Adam, SGD
 
@@ -136,6 +137,7 @@ class DSACU(AlgorithmBase):
         self.lambda_lower = kwargs["lambda_lower"]
         self.lambda_upper = kwargs["lambda_upper"]
         self.share_target = kwargs['share_target']
+        self.use_huber_loss = kwargs['use_huber_loss']
 
     @property
     def adjustable_parameters(self):
@@ -410,11 +412,21 @@ class DSACU(AlgorithmBase):
             sigma_detach = torch.clamp(sigmas[i], min=0.).detach()
             bias = 0.1
 
-            q_loss = (torch.pow(self.mean_sigmas[i], 2) + bias) * torch.mean(
-                -(target_q - qs[i]).detach() / (torch.pow(sigma_detach, 2) + bias) * qs[i]
-                - ((torch.pow(qs[i].detach() - target_z_bound, 2) - sigma_detach.pow(2)) 
-                   / (torch.pow(sigma_detach, 3) + bias)) * sigmas[i]
-            )
+            if self.use_huber_loss:
+                ratio = (torch.pow(self.mean_sigmas[i], 2) / \
+                        (torch.pow(sigma_detach, 2) + bias)).clamp(min=0.1, max=10)
+                q_loss = torch.mean(ratio * (
+                    huber_loss(qs[i], target_q, delta = 50, reduction='none') + \
+                    sigmas[i] * (sigma_detach.pow(2) - huber_loss(
+                        target_q.detach(), target_z_bound, delta = 50, reduction='none'
+                    ))/(sigma_detach + bias)
+                ))
+            else:
+                q_loss = (torch.pow(self.mean_sigmas[i], 2) + bias) * torch.mean(
+                    -(target_q - qs[i]).detach() / (torch.pow(sigma_detach, 2) + bias) * qs[i]
+                    - ((torch.pow(qs[i].detach() - target_z_bound, 2) - sigma_detach.pow(2)) 
+                    / (torch.pow(sigma_detach, 3) + bias)) * sigmas[i]
+                )
 
             total_loss += q_loss
             avg_qs.append(qs[i].detach().mean())

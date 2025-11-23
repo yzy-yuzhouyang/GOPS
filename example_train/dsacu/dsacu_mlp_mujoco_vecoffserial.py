@@ -28,15 +28,16 @@ if __name__ == "__main__":
 
     ################################################
     # Key Parameters for users
-    parser.add_argument("--env_id", type=str, default="gymna_humanoidstandup", help="id of environment") #gym_halfcheetah
+    parser.add_argument("--env_id", type=str, default="gymna_humanoid", help="id of environment") #gym_halfcheetah
     parser.add_argument("--algorithm", type=str, default="DSACU", help="RL algorithm")
     parser.add_argument("--enable_cuda", default=True, help="Enable CUDA")
     parser.add_argument("--seed", default=12345, help="Global seed")
-    parser.add_argument("--num_q", default=2, help="num_q")
-    parser.add_argument("--beta", default=0.001, help="beta")
-    parser.add_argument("--lambda_lower", default=0.5, help="lambda_lower")
-    parser.add_argument("--lambda_upper", default=0.0, help="lambda_upper")
+    parser.add_argument("--num_q", default=4, help="num_q")
+    parser.add_argument("--beta", default=0.2, help="beta")
+    parser.add_argument("--lambda_lower", default=1.0, help="lambda_lower")
+    parser.add_argument("--lambda_upper", default=0.5, help="lambda_upper")
     parser.add_argument("--mix_mode", default="default", help="mix_policy")
+    parser.add_argument("--use_huber_loss", default=True, help="use huber loss")
     parser.add_argument("--freeze_early_beta", default=False, help="freeze_early_beta")
     parser.add_argument("--auto_lambda", default=False, help="auto_lambda")
     parser.add_argument("--share_target", default=False, help="share_target")
@@ -99,7 +100,7 @@ if __name__ == "__main__":
     parser.add_argument("--value_learning_rate", type=float, default=0.0001)
     parser.add_argument("--policy_learning_rate", type=float, default=0.0001)
     parser.add_argument("--alpha_learning_rate", type=float, default=0.0003)
-    parser.add_argument("--beta_learning_rate", type=float, default=3e-5) # SGD: 1.5e-6
+    parser.add_argument("--beta_learning_rate", type=float, default=5e-4) # SGD: 1.5e-6
     # special parameter
     parser.add_argument("--gamma", type=float, default=0.99)
     parser.add_argument("--tau", type=float, default=0.005)
