@@ -393,6 +393,9 @@ class DSACU(AlgorithmBase):
                     index=closest_indices.unsqueeze(0)
                 ).squeeze(0)
         
+        total_loss = 0
+        avg_qs = []
+        avg_sigmas = []
         for i in range(self.networks.num_q):
             target_q, target_z_bound = self._compute_target_q(
                 rew,
@@ -413,9 +416,6 @@ class DSACU(AlgorithmBase):
                    / (torch.pow(sigma_detach, 3) + bias)) * sigmas[i]
             )
 
-            total_loss = 0
-            avg_qs = []
-            avg_sigmas = []
             total_loss += q_loss
             avg_qs.append(qs[i].detach().mean())
             avg_sigmas.append(sigmas[i].detach().mean())
