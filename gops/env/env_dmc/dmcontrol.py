@@ -1,232 +1,109 @@
-from collections import deque, defaultdict
-from typing import Any, NamedTuple
+from collections import defaultdict, deque
 
-import dm_env
+import gymnasium as gym
 import numpy as np
-from dm_control import suite
+import torch
 
-suite.ALL_TASKS = suite.ALL_TASKS + suite._get_tasks("custom")
+from dm_control import suite
+suite.ALL_TASKS = suite.ALL_TASKS + suite._get_tasks('custom')
 suite.TASKS_BY_DOMAIN = suite._get_tasks_by_domain(suite.ALL_TASKS)
 from dm_control.suite.wrappers import action_scale
-from dm_env import StepType, specs
-import gymnasium as gym
 
-class ExtendedTimeStep(NamedTuple):
-    step_type: Any
-    reward: Any
-    discount: Any
-    observation: Any
-    action: Any
+class Timeout(gym.Wrapper):
+    """
+    Wrapper for enforcing a time limit on the environment.
+    """
 
-    def first(self):
-        return self.step_type == StepType.FIRST
+    def __init__(self, env, max_episode_steps):
+        super().__init__(env)
+        self._max_episode_steps = max_episode_steps
+    
+    @property
+    def max_episode_steps(self):
+        return self._max_episode_steps
 
-    def mid(self):
-        return self.step_type == StepType.MID
-
-    def last(self):
-        return self.step_type == StepType.LAST
-
-
-class ActionRepeatWrapper(dm_env.Environment):
-    def __init__(self, env, num_repeats):
-        self._env = env
-        self._num_repeats = num_repeats
+    def reset(self, **kwargs):
+        self._t = 0
+        info = {}
+        return self.env.reset(**kwargs), info
 
     def step(self, action):
-        reward = 0.0
-        discount = 1.0
-        for i in range(self._num_repeats):
-            time_step = self._env.step(action)
-            reward += (time_step.reward or 0.0) * discount
-            discount *= time_step.discount
-            if time_step.last():
-                break
-
-        return time_step._replace(reward=reward, discount=discount)
-
-    def observation_spec(self):
-        return self._env.observation_spec()
-
-    def action_spec(self):
-        return self._env.action_spec()
-
-    def reset(self):
-        return self._env.reset()
-
-    def __getattr__(self, name):
-        return getattr(self._env, name)
+        obs, reward, te, tr, info = self.env.step(action)
+        self._t += 1
+        tr = self._t >= self.max_episode_steps
+        return obs, reward, te, tr, info
 
 
-class ActionDTypeWrapper(dm_env.Environment):
-    def __init__(self, env, dtype):
-        self._env = env
-        wrapped_action_spec = env.action_spec()
-        self._action_spec = specs.BoundedArray(
-            wrapped_action_spec.shape,
-            dtype,
-            wrapped_action_spec.minimum,
-            wrapped_action_spec.maximum,
-            "action",
-        )
-
-    def step(self, action):
-        action = action.astype(self._env.action_spec().dtype)
-        return self._env.step(action)
-
-    def observation_spec(self):
-        return self._env.observation_spec()
-
-    def action_spec(self):
-        return self._action_spec
-
-    def reset(self):
-        return self._env.reset()
-
-    def __getattr__(self, name):
-        return getattr(self._env, name)
+def get_obs_shape(env):
+    obs_shp = []
+    for v in env.observation_spec().values():
+        try:
+            shp = np.prod(v.shape)
+        except:
+            shp = 1
+        obs_shp.append(shp)
+    return (int(np.sum(obs_shp)),)
 
 
-class ExtendedTimeStepWrapper(dm_env.Environment):
-    def __init__(self, env):
-        self._env = env
-
-    def reset(self):
-        time_step = self._env.reset()
-        return self._augment_time_step(time_step)
-
-    def step(self, action):
-        time_step = self._env.step(action)
-        return self._augment_time_step(time_step, action)
-
-    def _augment_time_step(self, time_step, action=None):
-        if action is None:
-            action_spec = self.action_spec()
-            action = np.zeros(action_spec.shape, dtype=action_spec.dtype)
-        return ExtendedTimeStep(
-            observation=time_step.observation,
-            step_type=time_step.step_type,
-            action=action,
-            reward=time_step.reward or 0.0,
-            discount=time_step.discount or 1.0,
-        )
-
-    def observation_spec(self):
-        return self._env.observation_spec()
-
-    def action_spec(self):
-        return self._env.action_spec()
-
-    def __getattr__(self, name):
-        return getattr(self._env, name)
-
-
-class TimeStepToGymWrapper:
-    def __init__(self, env, domain, task):
-        obs_shp = []
-        for v in env.observation_spec().values():
-            try:
-                shp = np.prod(v.shape)
-            except:
-                shp = 1
-            obs_shp.append(shp)
-        obs_shp = (int(np.sum(obs_shp)),)
-        act_shp = env.action_spec().shape
-        self.observation_space = gym.spaces.Box(
-            low=np.full(obs_shp, -np.inf, dtype=np.float32),
-            high=np.full(obs_shp, np.inf, dtype=np.float32),
-            dtype=np.float32,
-        )
-        self.action_space = gym.spaces.Box(
-            low=np.full(act_shp, env.action_spec().minimum),
-            high=np.full(act_shp, env.action_spec().maximum),
-            dtype=env.action_spec().dtype,
-        )
+class DMControlWrapper:
+    def __init__(self, env, domain):
         self.env = env
-        self.domain = domain
-        self.task = task
-        self.max_episode_steps = 500
-        self.t = 0
+        self.camera_id = 2 if domain == 'quadruped' else 0
+        obs_shape = get_obs_shape(env)
+        action_shape = env.action_spec().shape
+        self.observation_space = gym.spaces.Box(
+            low=np.full(obs_shape, -np.inf, dtype=np.float32),
+            high=np.full(obs_shape, np.inf, dtype=np.float32),
+            dtype=np.float32)
+        self.action_space = gym.spaces.Box(
+            low=np.full(action_shape, env.action_spec().minimum),
+            high=np.full(action_shape, env.action_spec().maximum),
+            dtype=env.action_spec().dtype)
+        self.action_spec_dtype = env.action_spec().dtype
 
     @property
     def unwrapped(self):
         return self.env
-
-    @property
-    def reward_range(self):
-        return None
-
-    @property
-    def metadata(self):
-        return None
-
+    
     def _obs_to_array(self, obs):
-        return np.concatenate([v.flatten() for v in obs.values()])
-
-    def reset(self):
-        self.t = 0
-        return self._obs_to_array(self.env.reset().observation), {"terminated": False, "truncated": False}
+        return np.concatenate([v.flatten() for v in obs.values()], dtype=np.float32)
+    
+    def reset(self, **kwargs):
+        seed = kwargs.get("seed", None)
+        if seed is not None:
+            if hasattr(self.action_space, 'seed'):
+                self.action_space.seed(seed)
+            if hasattr(self.observation_space, 'seed'):
+                self.observation_space.seed(seed)
+        return self._obs_to_array(self.env.reset().observation)
 
     def step(self, action):
-        self.t += 1
-        time_step = self.env.step(action)
-        te = False
-        tr = (time_step.last() or self.t == self.max_episode_steps)
-        info = {"terminated": te, "truncated": tr}
-        return (
-            self._obs_to_array(time_step.observation),
-            time_step.reward,
-            te,
-            tr,
-            info,
-        )
+        reward = 0
+        action = action.astype(self.action_spec_dtype)
+        for _ in range(2):
+            step = self.env.step(action)
+            reward += step.reward
+        return self._obs_to_array(step.observation), reward, False, False, defaultdict(float)
+    
+    def render(self, width=384, height=384, camera_id=None):
+        return self.env.physics.render(height, width, camera_id or self.camera_id)
 
-    def render(self, mode="rgb_array", width=640, height=480, camera_id=0):
-        camera_id = dict(quadruped=2).get(self.domain, camera_id)
-        return self.env.physics.render(height, width, camera_id)
-
-    def seed(self, seed):
-        seed_env(self, seed)
-
-    def close(self):
-        return self.env.close()
-
-def seed_env(env, seed):
-    """Also seed action space and observation space."""
-    # try:
-    #     env.reset(seed=seed)  # gym>=0.21
-    # except:
-    #     env.seed(seed)        # gym<0.21
-    if hasattr(env.action_space, 'seed'):
-        env.action_space.seed(seed)
-    if hasattr(env.observation_space, 'seed'):
-        env.observation_space.seed(seed)
 
 def make_env(task):
     """
     Make DMControl environment.
     Adapted from https://github.com/facebookresearch/drqv2
     """
-    domain, task = task.replace("-", "_").split("_", 1)
-    domain = dict(cup="ball_in_cup", pointmass="point_mass").get(domain, domain)
+    domain, task = task.replace('-', '_').split('_', 1)
+    domain = dict(cup='ball_in_cup', pointmass='point_mass').get(domain, domain)
     if (domain, task) not in suite.ALL_TASKS:
-        print("Available tasks are:", suite.ALL_TASKS)
-        raise ValueError("Unknown task:", task)
-    # assert cfg.obs in {
-    #     "state",
-    #     "rgb",
-    # }, "This task only supports state and rgb observations."
-    env = suite.load(
-        domain, task, task_kwargs={"random": 0}, visualize_reward=False
-    )
-    env = ActionDTypeWrapper(env, np.float32)
-    env = ActionRepeatWrapper(env, 2)
-    env = action_scale.Wrapper(env, minimum=-1.0, maximum=1.0)
-    env = ExtendedTimeStepWrapper(env)
-    env = TimeStepToGymWrapper(env, domain, task)
-    env.max_episode_steps = 1000
-    env.spec = None # to avoid gym errors
-    # seed_env(env, cfg.seed)
-    # reset
-    env.reset()
+        raise ValueError('Unknown task:', task)
+    # assert cfg.obs in {'state', 'rgb'}, 'This task only supports state and rgb observations.'
+    env = suite.load(domain,
+                     task,
+                     task_kwargs={'random': 1},
+                     visualize_reward=False)
+    env = action_scale.Wrapper(env, minimum=-1., maximum=1.)
+    env = DMControlWrapper(env, domain)
+    env = Timeout(env, max_episode_steps=500)
     return env

@@ -6,8 +6,7 @@
 #  Lab Leader: Prof. Shengbo Eben Li
 #  Email: lisb04@gmail.com
 #
-#  Description: Mujoco Ant Environment
-#  Update Date: 2021-11-22, Yuhang Zhang: create environment
+#  Description: Bench Hard Environment
 
 from gops.env.env_dmc.dmcontrol import make_env
 
@@ -22,9 +21,15 @@ def env_creator(**kwargs):
 
 
 if __name__ == "__main__":
-    env = env_creator()
-    env.reset()
+    from gops.env.wrapper.tensor import TensorWrapper
+    import torch
+    env = env_creator(**{"tensor_env":True})
+    env = TensorWrapper(env)
+    obs, info = env.reset(seed=1)
+    print(obs, info)
     for i in range(100):
         a = env.action_space.sample()
+        a = torch.from_numpy(a)
+        if i == 0:
+            print(a)
         out = env.step(a)
-        # env.render()

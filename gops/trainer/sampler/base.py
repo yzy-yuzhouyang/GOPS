@@ -166,7 +166,13 @@ class BaseSampler(metaclass=ABCMeta):
             return experiences
             
         else:
-            next_obs, reward, done, next_info = self.env.step(action_clip)
+            out = self.env.step(action_clip)
+            import gymnasium
+            if isinstance(self.env.action_space, gymnasium.spaces.Space):
+                next_obs, reward, te, tr, next_info = out
+                done = te or tr
+            else:
+                next_obs, reward, done, next_info = out
 
             # TODO: deprecate this after changing to gymnasium
             if "TimeLimit.truncated" not in next_info.keys():
