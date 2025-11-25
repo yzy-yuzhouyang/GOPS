@@ -307,14 +307,6 @@ class DSACU(AlgorithmBase):
             "DSAC2/critic_avg_std_std-RL iter": avg_sigmas_tensor.std().item(),
         })
 
-        valid_mean_sigmas = [sigma for sigma in self.mean_sigmas if sigma is not None]
-        if valid_mean_sigmas:
-            mean_sigmas_tensor = torch.tensor(valid_mean_sigmas)
-            tb_info.update({
-                "DSAC2/mean_mean_sigma": mean_sigmas_tensor.mean().item(),
-                "DSAC2/std_mean_sigma": mean_sigmas_tensor.std().item(),
-            })
-
         return tb_info
 
     def _q_evaluate(self, obs, act, qnet):
