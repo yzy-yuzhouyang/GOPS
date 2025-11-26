@@ -303,8 +303,8 @@ class DSACU(AlgorithmBase):
         tb_info.update({
             "DSAC2/critic_mean_q-RL iter": avg_qs_tensor.mean().item(),
             "DSAC2/critic_std_q-RL iter": avg_qs_tensor.std().item(),
-            "DSAC2/critic_avg_std_mean-RL iter": avg_sigmas_tensor.mean().item(),
-            "DSAC2/critic_avg_std_std-RL iter": avg_sigmas_tensor.std().item(),
+            "DSAC2/critic_mean_sigma-RL iter": avg_sigmas_tensor.mean().item(),
+            "DSAC2/critic_std_sigma-RL iter": avg_sigmas_tensor.std().item(),
         })
 
         return tb_info
