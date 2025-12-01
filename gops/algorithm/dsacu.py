@@ -249,7 +249,7 @@ class DSACU(AlgorithmBase):
             q_optimizer = getattr(self.networks, q_optimizer_name)
             q_optimizer.zero_grad()
             
-        loss_q, avg_qs, avg_sigmas = self._compute_loss_q(data)
+        loss_q, ensemble_qs_tensor, ensemble_sigmas_tensor = self._compute_loss_q(data)
         loss_q.backward()
 
         for i in range(self.networks.num_q):
@@ -296,15 +296,12 @@ class DSACU(AlgorithmBase):
             "DSAC2/mean_sigmas": sum(self.mean_sigmas) / self.networks.num_q if all(std is not None for std in self.mean_sigmas) else 0,
             tb_tags["alg_time"]: (time.time() - start_time) * 1000,
         }
-        
-        avg_qs_tensor = torch.tensor(avg_qs)
-        avg_sigmas_tensor = torch.tensor(avg_sigmas)
 
         tb_info.update({
-            "DSAC2/critic_mean_q-RL iter": avg_qs_tensor.mean().item(),
-            "DSAC2/critic_std_q-RL iter": avg_qs_tensor.std().item(),
-            "DSAC2/critic_mean_sigma-RL iter": avg_sigmas_tensor.mean().item(),
-            "DSAC2/critic_std_sigma-RL iter": avg_sigmas_tensor.std().item(),
+            "DSAC2/critic_mean_q-RL iter": ensemble_qs_tensor.mean().item(),
+            "DSAC2/critic_std_q-RL iter": ensemble_qs_tensor.std().item(),
+            "DSAC2/critic_mean_sigma-RL iter": ensemble_sigmas_tensor.mean().item(),
+            "DSAC2/critic_std_sigma-RL iter": ensemble_sigmas_tensor.std().item(),
         })
 
         return tb_info
@@ -388,8 +385,8 @@ class DSACU(AlgorithmBase):
                 ).squeeze(0)
         
         total_loss = 0
-        avg_qs = []
-        avg_sigmas = []
+        q_tensor = torch.stack(qs).detach()
+        sigmas_tensor = torch.stack(sigmas).detach()
         for i in range(self.networks.num_q):
             target_q, target_z_bound = self._compute_target_q(
                 rew,
@@ -421,10 +418,8 @@ class DSACU(AlgorithmBase):
                 )
 
             total_loss += q_loss
-            avg_qs.append(qs[i].detach().mean())
-            avg_sigmas.append(sigmas[i].detach().mean())
 
-        return total_loss, avg_qs, avg_sigmas
+        return total_loss, q_tensor.mean(dim=1), sigmas_tensor.mean(dim=1)
 
     def _compute_target_q(self, r, done, q, sigma, q_next, z_next, log_prob_a_next):
         target_q = r + (1 - done) * self.gamma * (
