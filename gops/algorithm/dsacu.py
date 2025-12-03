@@ -136,6 +136,8 @@ class DSACU(AlgorithmBase):
         self.max_iteration = kwargs['max_iteration']
         self.lambda_lower = kwargs["lambda_lower"]
         self.lambda_upper = kwargs["lambda_upper"]
+        self.share_q_step = kwargs['share_q_step']
+        self.share_sigma_step = kwargs['share_sigma_step']
         self.share_target = kwargs['share_target']
         self.use_huber_loss = kwargs['use_huber_loss']
 
@@ -385,8 +387,15 @@ class DSACU(AlgorithmBase):
                 ).squeeze(0)
         
         total_loss = 0
+        bias = 0.1
         q_tensor = torch.stack(qs).detach()
         sigmas_tensor = torch.stack(sigmas).detach()
+        if self.share_q_step or self.share_sigma_step:
+            mean_sigmas_tensor = torch.stack(self.mean_sigmas).detach()
+            shared_ratio = (
+                (torch.pow(torch.mean(mean_sigmas_tensor, dim=0), 2) + bias) / \
+                (torch.pow(torch.mean(sigmas_tensor, dim=0), 2) + bias)
+            )
         for i in range(self.networks.num_q):
             target_q, target_z_bound = self._compute_target_q(
                 rew,
@@ -399,22 +408,34 @@ class DSACU(AlgorithmBase):
             )
             
             sigma_detach = torch.clamp(sigmas[i], min=0.).detach()
-            bias = 0.1
+            default_ratio = (
+                (torch.pow(self.mean_sigmas[i], 2) + bias) / \
+                (torch.pow(sigma_detach, 2) + bias)
+            )
+            q_ratio = shared_ratio if self.share_q_step else default_ratio
+            sigma_ratio = shared_ratio if self.share_sigma_step else default_ratio
 
             if self.use_huber_loss:
-                ratio = (torch.pow(self.mean_sigmas[i], 2) / \
-                        (torch.pow(sigma_detach, 2) + bias)).clamp(min=0.1, max=10)
-                q_loss = torch.mean(ratio * (
-                    huber_loss(qs[i], target_q, delta = 50, reduction='none') + \
-                    sigmas[i] * (sigma_detach.pow(2) - huber_loss(
-                        target_q.detach(), target_z_bound, delta = 50, reduction='none'
-                    ))/(sigma_detach + bias)
-                ))
+                q_ratio = q_ratio.clamp(min=0.1, max=10)
+                sigma_ratio = sigma_ratio.clamp(min=0.1, max=10)
+                q_loss = torch.mean(
+                    q_ratio * (
+                        huber_loss(qs[i], target_q, delta = 50, reduction='none')
+                    ) + \
+                    sigma_ratio * sigmas[i] * (
+                        sigma_detach.pow(2) - huber_loss(
+                            target_q.detach(), target_z_bound, delta = 50, reduction='none'
+                        )
+                    ) / (sigma_detach + bias)
+                )
             else:
-                q_loss = (torch.pow(self.mean_sigmas[i], 2) + bias) * torch.mean(
-                    -(target_q - qs[i]).detach() / (torch.pow(sigma_detach, 2) + bias) * qs[i]
-                    - ((torch.pow(qs[i].detach() - target_z_bound, 2) - sigma_detach.pow(2)) 
-                    / (torch.pow(sigma_detach, 3) + bias)) * sigmas[i]
+                q_loss = - torch.mean(
+                    q_ratio * qs[i] * (
+                        (target_q - qs[i]).detach()
+                    ) + \
+                    sigma_ratio * sigmas[i] * (
+                        torch.pow(qs[i].detach() - target_z_bound, 2) - sigma_detach.pow(2)
+                    ) / (sigma_detach + bias)
                 )
 
             total_loss += q_loss

@@ -115,18 +115,21 @@ def init_args(env, **args):
                 f'-{args["lambda_upper"]}' + \
                 f'-{args["mix_mode"]}'
             config_string += '-auto_lambda' if args["auto_lambda"] else ''
+            config_string += '-share_q_step' if args["share_q_step"] else ''
+            config_string += '-share_sigma_step' if args["share_sigma_step"] else ''
             config_string += '-share_target' if args["share_target"] else ''
             config_string += '-entropy_scale' if args["entropy_scale_ratio"] != 1.0 else ''
-            config_string += f'-{args["exp_tag"]}'
+            config_string += args["exp_tag"]
             args["save_folder"] = os.path.join(
                 dir_path + "/results/",args["env_id"],
                 args["algorithm"] + f'-{args["seed"]}' + config_string + '_'+
                 datetime.datetime.now().strftime("%y%m%d-%H%M%S"),
             )
         else:
+            config_string = args["exp_tag"] if "exp_tag" in args else ''
             args["save_folder"] = os.path.join(
                 dir_path + "/results/",args["env_id"],
-                args["algorithm"] + f'-{args["seed"]}' +'_'+
+                args["algorithm"] + f'-{args["seed"]}' + config_string + '_' +
                 datetime.datetime.now().strftime("%y%m%d-%H%M%S"),
             )
     os.makedirs(args["save_folder"], exist_ok=True)
