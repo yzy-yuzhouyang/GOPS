@@ -101,13 +101,14 @@ class EvaluatorDsact:
                 eval_dict,
             )
 
+
         # DSAC-T: Compute value statistics.
         with torch.no_grad():
+            selected_obs_list = obs_list[:200] + (obs_list[-1:] if len(obs_list) > 200 else [])
+            selected_act_list = action_list[:200] + (action_list[-1:] if len(action_list) > 200 else [])
             # Convert recent history to tensors (limit to 200 steps for stability)
-            obs_array = np.array(obs_list[:200], dtype=np.float32)
-            action_array = np.array(action_list[:200], dtype=np.float32)
-            obs_tensor = torch.from_numpy(obs_array)
-            action_tensor = torch.from_numpy(action_array)
+            obs_tensor = torch.from_numpy(np.array(selected_obs_list, dtype=np.float32))
+            action_tensor = torch.from_numpy(np.array(selected_act_list, dtype=np.float32))
             if hasattr(self.networks, 'device'):
                 obs_tensor = obs_tensor.to(self.networks.device)
                 action_tensor = action_tensor.to(self.networks.device)
@@ -144,74 +145,42 @@ class EvaluatorDsact:
         relative_std_output_sigmas = relative_std_output_sigmas.cpu().numpy()
         
         # Compute true Q-values using Monte Carlo returns
-        true_q_list = []
+        N = min(200, len(reward_list) - 1)
         alpha = self.networks.log_alpha.exp().item()
         gamma = self.gamma
-        for i in range(min(200, len(reward_list))):
-            true_q = self.reward_scale * (sum([r * (gamma**j) for j, r in enumerate(reward_list[i:-1])]) \
-                    - alpha * sum([log_prob * (gamma**j) for j, log_prob in enumerate(log_prob_list[i+1:])]) \
-                    + mean_output_qs[-1] * (gamma**(len(reward_list)-i-1)))
+        true_q_list = []
+        next_value = mean_output_qs[-1] - alpha * log_prob_list[-1]
+        
+        iter_range = range(len(reward_list) - 2, -1, -1)
+        for i in iter_range:
+            r = reward_list[i] * self.reward_scale
+            true_q = r + gamma * next_value
             true_q_list.append(true_q)
-            
-        true_q_array = np.array(true_q_list)
-        mean_output_qs = mean_output_qs[:len(true_q_array)]
+            current_log_prob = log_prob_list[i]
+            next_value = true_q - alpha * current_log_prob
 
-        # --- Outlier Detection and Removal ---
-        
-        # 1. Sanity check: Filter out NaN (Not a Number) and Inf (Infinity) values first
-        finite_mask = np.isfinite(true_q_array)
-        
-        # Apply finite mask temporarily to calculate statistics safely
-        temp_clean_q = true_q_array[finite_mask]
+        true_q_list.reverse()
+        true_qs = np.array(true_q_list)
 
-        if len(temp_clean_q) > 0:
-            # 2. Calculate IQR (Interquartile Range) for statistical outlier detection
-            # Q1 is the 25th percentile, Q3 is the 75th percentile
-            q1 = np.percentile(temp_clean_q, 25)
-            q3 = np.percentile(temp_clean_q, 75)
-            iqr = q3 - q1
-            
-            # Define bounds: typically 1.5 times the IQR above Q3 or below Q1
-            lower_bound = q1 - 1.5 * iqr
-            upper_bound = q3 + 1.5 * iqr
-            
-            # Create a boolean mask: True for valid values, False for outliers
-            valid_range_mask = (true_q_array >= lower_bound) & (true_q_array <= upper_bound)
-            
-            # Combine the finite check and the range check
-            final_mask = finite_mask & valid_range_mask
-            
-            # Apply the mask to remove outliers from both arrays
-            true_q_array = true_q_array[final_mask]
-            mean_output_qs = mean_output_qs[final_mask]  
-        else:
-            # Handle edge case where all values are NaN/Inf
-            true_q_array = np.array([])
-            mean_output_qs = np.array([])
-
-        # --- End Outlier Removal ---
-
-        # Compute Q-value bias statistics using the cleaned arrays
-        q_bias = mean_output_qs - true_q_array  # Q-estimate vs true Q
-        
-        # Check if array is empty to avoid errors in mean calculation
-        if len(q_bias) > 0:
-            overestiamtion_ratio = np.mean(q_bias > 0)
-        else:
-            overestiamtion_ratio = 0.0
+        # Compute Q-value bias statistics
+        mean_output_qs_aligned = mean_output_qs[:N]
+        true_qs_aligned = true_qs[:N]
+        assert len(mean_output_qs_aligned) == len(true_qs_aligned), \
+            f"Q-value length mismatch: predicted={len(mean_output_qs_aligned)}, true={len(true_qs_aligned)}"         
+        q_bias = mean_output_qs_aligned - true_qs_aligned
 
         # Populate evaluation metrics dictionary
         qx_tb_eval_dict["total_avg_return"] = sum(reward_list)  # Total episode return
-        qx_tb_eval_dict['true_q'] = np.mean(true_q_list)  # Average true Q-value
-        qx_tb_eval_dict['mean_output_q'] = np.mean(mean_output_qs)  # Average estimated Q-value
-        qx_tb_eval_dict['std_output_q'] = np.mean(std_output_qs)  # Mean Q-value disagreement
-        qx_tb_eval_dict['std_output_sigma'] = np.mean(std_output_sigmas)  # Mean std disagreement
-        qx_tb_eval_dict['relative_std_output_q'] = np.mean(relative_std_output_qs)  # Relative Q disagreement
-        qx_tb_eval_dict['relative_std_output_sigma'] = np.mean(relative_std_output_sigmas)  # Relative std disagreement
+        qx_tb_eval_dict['true_q'] = np.mean(true_qs_aligned)  # Average true Q-value
+        qx_tb_eval_dict['mean_output_q'] = np.mean(mean_output_qs[:N])  # Average estimated Q-value
+        qx_tb_eval_dict['std_output_q'] = np.mean(std_output_qs[:N])  # Mean Q-value disagreement
+        qx_tb_eval_dict['std_output_sigma'] = np.mean(std_output_sigmas[:N])  # Mean std disagreement
+        qx_tb_eval_dict['relative_std_output_q'] = np.mean(relative_std_output_qs[:N])  # Relative Q disagreement
+        qx_tb_eval_dict['relative_std_output_sigma'] = np.mean(relative_std_output_sigmas[:N])  # Relative std disagreement
         qx_tb_eval_dict['mean_q_bias'] = np.mean(q_bias)  # Mean Q-value bias
         qx_tb_eval_dict['std_q_bias'] = np.std(q_bias)  # Std of Q-value bias
         qx_tb_eval_dict['episode_length'] = len(reward_list)  # Episode length
-        qx_tb_eval_dict['overestimation_ratio'] = overestiamtion_ratio  # Overestimation ratio
+        qx_tb_eval_dict['overestimation_ratio'] = np.mean(q_bias > 0)  # Overestimation ratio
 
         return qx_tb_eval_dict
 
