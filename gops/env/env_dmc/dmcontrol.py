@@ -60,6 +60,7 @@ class DMControlWrapper:
             high=np.full(action_shape, env.action_spec().maximum),
             dtype=env.action_spec().dtype)
         self.action_spec_dtype = env.action_spec().dtype
+        self.metadata = self._build_metadata()
 
     @property
     def unwrapped(self):
@@ -67,6 +68,15 @@ class DMControlWrapper:
     
     def _obs_to_array(self, obs):
         return np.concatenate([v.flatten() for v in obs.values()], dtype=np.float32)
+    
+    def _build_metadata(self):
+        control_timestep = self.env.control_timestep()
+        render_fps = int(1 / control_timestep)
+        return {
+            "render_modes": ["human", "rgb_array"],
+            "render_fps": render_fps,
+            "video.frames_per_second": render_fps 
+        }
     
     def reset(self, **kwargs):
         seed = kwargs.get("seed", None)
@@ -87,6 +97,9 @@ class DMControlWrapper:
     
     def render(self, width=384, height=384, camera_id=None):
         return self.env.physics.render(height, width, camera_id or self.camera_id)
+    
+    def close(self):
+        pass
 
 
 def make_env(task):
