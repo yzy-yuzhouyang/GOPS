@@ -105,9 +105,15 @@ class BaseSampler(metaclass=ABCMeta):
             )
         else:
             batch_obs = torch.from_numpy(self.obs.astype("float32"))
+        device = next(self.networks.parameters()).device
+        if device != "cpu":
+            batch_obs = batch_obs.to(device)
         logits = self.networks.policy(batch_obs)
         action_distribution = self.networks.create_action_distributions(logits)
         action, logp = action_distribution.sample()
+        if device != "cpu":
+            action = action.cpu()
+            logp = logp.cpu()
 
         if self._is_vector:
             action = action.detach().numpy()

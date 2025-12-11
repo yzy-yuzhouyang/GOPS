@@ -61,4 +61,9 @@ def create_evaluator(evaluator_name: str, **kwargs) -> object:
     else:
         raise RuntimeError(f"{spec_.evaluator_name} registered but entry_point is not specified")
 
-    return ray.remote(num_cpus=1)(evaluator_creator).remote(**_kwargs)
+    # return ray.remote(num_cpus=1)(evaluator_creator).remote(**_kwargs)
+    device = _kwargs.get("device", "cpu")
+    if device == "cpu":
+        return ray.remote(num_cpus=1)(evaluator_creator).remote(**_kwargs)
+    else:
+        return ray.remote(num_gpus=1)(evaluator_creator).remote(**_kwargs)

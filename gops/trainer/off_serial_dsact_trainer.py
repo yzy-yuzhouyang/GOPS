@@ -34,6 +34,7 @@ class OffSerialDsactTrainer:
         self.buffer = buffer
         self.per_flag = kwargs["buffer_name"] == "prioritized_replay_buffer"
         self.evaluator = evaluator
+        self.device = kwargs.get("device", "cpu")
 
         # create center network
         self.networks = self.alg.networks
@@ -79,8 +80,11 @@ class OffSerialDsactTrainer:
     def step(self):
         # sampling
         if self.iteration % self.sample_interval == 0:
-            with ModuleOnDevice(self.networks, "cpu"):
+            if self.device != "cpu":
                 sampler_samples, sampler_tb_dict = self.sampler.sample()
+            else:
+                with ModuleOnDevice(self.networks, "cpu"):
+                    sampler_samples, sampler_tb_dict = self.sampler.sample()
             self.buffer.add_batch(sampler_samples)
             self.sampler_tb_dict.add_average(sampler_tb_dict)
 

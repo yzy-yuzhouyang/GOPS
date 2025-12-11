@@ -34,6 +34,7 @@ class OffSerialDsacuTrainer:
         self.buffer = buffer
         self.per_flag = kwargs["buffer_name"] == "prioritized_replay_buffer"
         self.evaluator = evaluator
+        self.device = kwargs.get("device", "cpu")
 
         # create center network
         self.networks = self.alg.networks
@@ -84,36 +85,39 @@ class OffSerialDsacuTrainer:
     def step(self):
         # sampling
         if self.iteration % self.sample_interval == 0:
-            with ModuleOnDevice(self.networks, "cpu"):
-                if self.use_optimistic_behavior_policy:
-                    # Mode 1
-                    if self.mix_mode == "continue":
-                        mix_ratio = 1 - self.networks.beta.item() / self.networks.beta_init
-                        if mix_ratio > 1e-4 and mix_ratio < 1 - 1e-4:
-                            if torch.rand(1).item() < mix_ratio:
-                                self.sampler.use_target_policy = True
-                            else:
-                                self.sampler.use_target_policy = False
-                        elif mix_ratio <= 1e-4:
-                            self.sampler.use_target_policy = False
-                        else:
-                            self.sampler.use_target_policy = True
-
-                    # Mode 2
-                    elif self.mix_mode == "step":
-                        if self.networks.beta.item() < 1e-6:
+            if self.use_optimistic_behavior_policy:
+                # Mode 1
+                if self.mix_mode == "continue":
+                    mix_ratio = 1 - self.networks.beta.item() / self.networks.beta_init
+                    if mix_ratio > 1e-4 and mix_ratio < 1 - 1e-4:
+                        if torch.rand(1).item() < mix_ratio:
                             self.sampler.use_target_policy = True
                         else:
                             self.sampler.use_target_policy = False
+                    elif mix_ratio <= 1e-4:
+                        self.sampler.use_target_policy = False
+                    else:
+                        self.sampler.use_target_policy = True
 
-                    elif self.mix_mode == "default":
+                # Mode 2
+                elif self.mix_mode == "step":
+                    if self.networks.beta.item() < 1e-6:
+                        self.sampler.use_target_policy = True
+                    else:
                         self.sampler.use_target_policy = False
 
-                    else:
-                        raise ValueError(f"不支持的mix_mode: {self.mix_mode}，当前仅支持 'continue' 和 'step' 模式")
+                elif self.mix_mode == "default":
+                    self.sampler.use_target_policy = False
+
                 else:
-                    self.sampler.use_target_policy = True
+                    raise ValueError(f"不支持的mix_mode: {self.mix_mode}，当前仅支持 'continue' 和 'step' 模式")
+            else:
+                self.sampler.use_target_policy = True
+            if self.device != "cpu":
                 sampler_samples, sampler_tb_dict = self.sampler.sample()
+            else:
+                with ModuleOnDevice(self.networks, "cpu"):
+                    sampler_samples, sampler_tb_dict = self.sampler.sample()
             self.buffer.add_batch(sampler_samples)
             self.sampler_tb_dict.add_average(sampler_tb_dict)
 
