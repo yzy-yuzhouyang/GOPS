@@ -130,16 +130,18 @@ class DSACU(AlgorithmBase):
         self.delay_update = delay_update
         self.mean_sigmas = [None] * self.networks.num_q
         self.mean_uncertainty = None
-        self.mean_rel_u_epi = None
+        self.mean_u_epistemic = None
         self.tau_b = kwargs.get("tau_b", self.tau)
         self.beta_init = kwargs['beta']
         self.max_iteration = kwargs['max_iteration']
         self.lambda_lower = kwargs["lambda_lower"]
         self.lambda_upper = kwargs["lambda_upper"]
+        self.enable_epi_step_scale = kwargs["enable_epi_step_scale"]
         self.share_q_step = kwargs['share_q_step']
         self.share_sigma_step = kwargs['share_sigma_step']
         self.share_target = kwargs['share_target']
         self.use_huber_loss = kwargs['use_huber_loss']
+        self.q_bias_lower_threshold = kwargs["q_bias_lower_threshold"]
 
     @property
     def adjustable_parameters(self):
@@ -281,6 +283,7 @@ class DSACU(AlgorithmBase):
             loss_alpha.backward()
 
         if update_beta:
+            overestimation = max(overestimation, self.q_bias_lower_threshold) 
             mean_uncertainty = max(self.mean_uncertainty, 0.1)
             overestimation = overestimation / mean_uncertainty
             self.networks.beta_optimizer.zero_grad()
@@ -347,6 +350,15 @@ class DSACU(AlgorithmBase):
                 self.mean_sigmas[i] = (1 - self.tau_b) * self.mean_sigmas[i] + \
                     self.tau_b * torch.mean(sigma.detach())
 
+        q_tensor = torch.stack(qs).detach()
+        sigmas_tensor = torch.stack(sigmas).detach()
+        u_epistemic = torch.var(q_tensor, dim=0)
+        if self.mean_u_epistemic is None:
+            self.mean_u_epistemic = torch.mean(u_epistemic)
+        else:
+            self.mean_u_epistemic = (1 - self.tau_b) * self.mean_u_epistemic + \
+                self.tau_b * torch.mean(u_epistemic)
+
         with torch.no_grad():
             qs_next = []
             sigmas_next = []
@@ -362,23 +374,23 @@ class DSACU(AlgorithmBase):
                 sigmas_next.append(sigma_next)
                 zs_next.append(z_next)
 
-            qs_next_tensor = torch.stack(qs_next)
-            u_epistemic = torch.var(qs_next_tensor, dim=0)
-            sigmas_next_tensor = torch.stack(sigmas_next)
-            u_aleatoric = torch.mean(sigmas_next_tensor ** 2, dim=0)
+            q_next_tensor = torch.stack(qs_next)
+            u_next_epistemic = torch.var(q_next_tensor, dim=0)
+            sigma_next_tensor = torch.stack(sigmas_next)
+            u_next_aleatoric = torch.mean(sigma_next_tensor ** 2, dim=0)
             
             factor_aleatoric = (self._get_beta() / self.lambda_lower) ** 2
-            uncertainty = torch.sqrt(torch.clip(u_epistemic + factor_aleatoric * u_aleatoric, min=1e-8))
-            target_q_next = torch.mean(qs_next_tensor, dim=0) - self.lambda_lower * uncertainty
+            uncertainty = torch.sqrt(torch.clip(u_next_epistemic + factor_aleatoric * u_next_aleatoric, min=1e-8))
+            target_q_next = torch.mean(q_next_tensor, dim=0) - self.lambda_lower * uncertainty
 
             if self.mean_uncertainty is None:
                 self.mean_uncertainty = self.lambda_lower * torch.mean(uncertainty.detach())
             else:
                 self.mean_uncertainty = (1 - self.tau_b) * self.mean_uncertainty + \
-                                        self.lambda_lower * self.tau_b * torch.mean(uncertainty.detach())
+                    self.lambda_lower * self.tau_b * torch.mean(uncertainty.detach())
                 
             if self.share_target:
-                distances = torch.abs(qs_next_tensor - target_q_next.unsqueeze(0))
+                distances = torch.abs(q_next_tensor - target_q_next.unsqueeze(0))
                 closest_indices = torch.argmin(distances, dim=0)  # [B]
                 zs_next_tensor = torch.stack(zs_next)  # [num_q, B]
                 shared_zs_next = zs_next_tensor.gather(
@@ -388,8 +400,6 @@ class DSACU(AlgorithmBase):
         
         total_loss = 0
         bias = 0.1
-        q_tensor = torch.stack(qs).detach()
-        sigmas_tensor = torch.stack(sigmas).detach()
         if self.share_q_step or self.share_sigma_step:
             mean_sigmas_tensor = torch.stack(self.mean_sigmas).detach()
             shared_ratio = (
@@ -408,16 +418,27 @@ class DSACU(AlgorithmBase):
             )
             
             sigma_detach = torch.clamp(sigmas[i], min=0.).detach()
-            default_ratio = (
-                (torch.pow(self.mean_sigmas[i], 2) + bias) / \
-                (torch.pow(sigma_detach, 2) + bias)
-            )
-            q_ratio = shared_ratio if self.share_q_step else default_ratio
-            sigma_ratio = shared_ratio if self.share_sigma_step else default_ratio
+            if self.enable_epi_step_scale:
+                default_q_ratio = (
+                    (torch.pow(self.mean_sigmas[i], 2) + self.mean_u_epistemic + bias) / \
+                    (torch.pow(sigma_detach, 2) + u_epistemic + bias)
+                )
+                default_sigma_ratio = (
+                    (torch.pow(self.mean_sigmas[i], 2) + bias) / \
+                    (torch.pow(sigma_detach, 2) + bias)
+                )
+            else:
+                default_q_ratio = (
+                    (torch.pow(self.mean_sigmas[i], 2) + bias) / \
+                    (torch.pow(sigma_detach, 2) + bias)
+                )
+                default_sigma_ratio = default_q_ratio
+            q_ratio = shared_ratio if self.share_q_step else default_q_ratio
+            sigma_ratio = shared_ratio if self.share_sigma_step else default_sigma_ratio
 
             if self.use_huber_loss:
-                q_ratio = q_ratio.clamp(min=0.1, max=10)
-                sigma_ratio = sigma_ratio.clamp(min=0.1, max=10)
+                q_ratio = q_ratio.clamp(min=0.02, max=50)
+                sigma_ratio = sigma_ratio.clamp(min=0.02, max=50)
                 q_loss = torch.mean(
                     q_ratio * (
                         huber_loss(qs[i], target_q, delta = 50, reduction='none')

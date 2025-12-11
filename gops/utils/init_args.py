@@ -115,6 +115,7 @@ def init_args(env, **args):
                 f'-{args["lambda_upper"]}' + \
                 f'-{args["mix_mode"]}'
             config_string += '-auto_lambda' if args["auto_lambda"] else ''
+            config_string += '-enable_epi_step_scale' if args["enable_epi_step_scale"] else ''
             config_string += '-share_q_step' if args["share_q_step"] else ''
             config_string += '-share_sigma_step' if args["share_sigma_step"] else ''
             config_string += '-share_target' if args["share_target"] else ''

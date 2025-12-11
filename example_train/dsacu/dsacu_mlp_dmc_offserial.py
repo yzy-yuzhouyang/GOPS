@@ -7,7 +7,7 @@
 #  Email: lisb04@gmail.com
 #
 #  Description: example for dsac-t + humanoidconti + mlp + offserial
-#  Update Date: 2024-12-27, Wenxuan Wang: create example
+#  Update Date: 2021-03-05, Wenxuan Wang: create example
 
 import argparse
 
@@ -28,13 +28,14 @@ if __name__ == "__main__":
 
     ################################################
     # Key Parameters for users
-    parser.add_argument("--env_id", type=str, default="gym_humanoid", help="id of environment") #gym_halfcheetah
+    parser.add_argument("--env_id", type=str, default="dmc_dogrun", help="id of environment")
     parser.add_argument("--algorithm", type=str, default="DSACU", help="RL algorithm")
     parser.add_argument("--enable_cuda", default=True, help="Enable CUDA")
-    parser.add_argument("--seed", default=52345, help="Global seed")
-    parser.add_argument("--use_huber_loss", default=False, help="use huber loss")
+    parser.add_argument("--device", type=str, default="cpu", help="device")
+    parser.add_argument("--seed", default=12345, help="Global seed")
+    parser.add_argument("--use_huber_loss", default=True, help="use huber loss")
     parser.add_argument("--entropy_scale_ratio", default=1.0, help="entropy_scale_ratio")
-    parser.add_argument("--exp_tag", default="_v3_delta_beta", help="exp_tag")
+    parser.add_argument("--exp_tag", default="_v2_50_reward_scale_1e-3_lr_0.05_20", help="exp_tag")
     ################################################
     # Special Parameters for DSAC-U
     # 1. Epistemic-aware distributional value ensemble
@@ -43,12 +44,12 @@ if __name__ == "__main__":
     parser.add_argument("--auto_lambda", default=False, help="auto_lambda")
     parser.add_argument("--enable_epi_step_scale", default=True, help="enable_epi_step_scale")
     # 2. Aleatoric-pessimistic bias rectification
-    parser.add_argument("--beta", default=0.2, help="beta")
-    parser.add_argument("--beta_learning_rate", type=float, default=5e-4)
+    parser.add_argument("--beta", default=0.1, help="beta")
+    parser.add_argument("--beta_learning_rate", type=float, default=1e-3)
     parser.add_argument("--freeze_early_beta", default=True, help="freeze_early_beta")
-    parser.add_argument("--q_bias_lower_threshold", default=-50, help="q_bias_lower_threshold")
+    parser.add_argument("--q_bias_lower_threshold", default=-1000, help="q_bias_lower_threshold")
     # 3. Exploration-optimistic policy improvement
-    parser.add_argument("--lambda_upper", default=1.0, help="lambda_upper")
+    parser.add_argument("--lambda_upper", default=0.5, help="lambda_upper")
     parser.add_argument("--mix_mode", default="default", help="mix_policy")
     # 4. Others
     parser.add_argument("--share_q_step", default=False, help="share_q_step")
@@ -56,12 +57,10 @@ if __name__ == "__main__":
     parser.add_argument("--share_target", default=False, help="share_target")
     ################################################
     # 1. Parameters for environment
-    parser.add_argument("--vector_env_num", type=int, default=4, help="Number of vector envs")
-    parser.add_argument("--vector_env_type", type=str, default='async', help="Options: sync/async")
-    parser.add_argument("--gym2gymnasium", type=bool, default=True, help="Convert Gym-style env to Gymsnaium-style")
-    parser.add_argument("--reward_scale", type=float, default=0.1, help="reward scale factor")
+    parser.add_argument("--reward_scale", type=float, default=50.0, help="reward scale factor")
     parser.add_argument("--is_render", type=bool, default=False, help="Draw environment animation")
     parser.add_argument("--is_adversary", type=bool, default=False, help="Adversary training")
+    parser.add_argument("--action_scale", type=bool, default=False, help="scale action to -1~1")
 
     ################################################
     # 2.1 Parameters of value approximate function
@@ -117,6 +116,7 @@ if __name__ == "__main__":
     parser.add_argument("--auto_alpha", type=bool, default=True)
     parser.add_argument("--delay_update", type=int, default=2)
 
+
     ################################################
     # 4. Parameters for trainer
     parser.add_argument(
@@ -126,7 +126,7 @@ if __name__ == "__main__":
         help="Options: on_serial_trainer, on_sync_trainer, off_serial_trainer, off_async_trainer",
     )
     # Maximum iteration number
-    parser.add_argument("--max_iteration", type=int, default=1500000)
+    parser.add_argument("--max_iteration", type=int, default=2000001)
     parser.add_argument(
         "--ini_network_dir",
         type=str,
@@ -159,21 +159,21 @@ if __name__ == "__main__":
     # 6. Parameters for evaluator
     parser.add_argument("--evaluator_name", type=str, default="evaluator_dsacu")
     parser.add_argument("--num_eval_episode", type=int, default=10)
-    parser.add_argument("--eval_interval", type=int, default=2500)
+    parser.add_argument("--eval_interval", type=int, default=10000)
     parser.add_argument("--eval_save", type=str, default=False, help="save evaluation data")
 
     ################################################
     # 7. Data savings
     parser.add_argument("--save_folder", type=str, default= None)
     # Save value/policy every N updates
-    parser.add_argument("--apprfunc_save_interval", type=int, default=50000)
+    parser.add_argument("--apprfunc_save_interval", type=int, default=500000)
     # Save key info every N updates
     parser.add_argument("--log_save_interval", type=int, default=10000)
 
     ################################################
     # Get parameter dictionary
     args = vars(parser.parse_args())
-    env = create_env(**{**args, "vector_env_num": None})
+    env = create_env(**args)
     args = init_args(env, **args)
 
     start_tensorboard(args["save_folder"])
