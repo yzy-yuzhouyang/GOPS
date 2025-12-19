@@ -149,7 +149,8 @@ class OffSerialDsacuTrainer:
         self.update_beta = False
 
         # log
-        if self.iteration % self.log_save_interval == 0:
+        log_save_interval = self.log_save_interval if self.iteration > 400000 else 2500
+        if self.iteration % log_save_interval == 0:
             print("Iter = ", self.iteration)
             add_scalars(alg_tb_dict, self.writer, step=self.iteration)
             add_scalars(self.sampler_tb_dict.pop(), self.writer, step=self.iteration)

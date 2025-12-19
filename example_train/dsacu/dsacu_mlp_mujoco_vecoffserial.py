@@ -34,7 +34,7 @@ if __name__ == "__main__":
     parser.add_argument("--seed", default=52345, help="Global seed")
     parser.add_argument("--use_huber_loss", default=False, help="use huber loss")
     parser.add_argument("--entropy_scale_ratio", default=1.0, help="entropy_scale_ratio")
-    parser.add_argument("--exp_tag", default="_v3_delta_beta", help="exp_tag")
+    parser.add_argument("--exp_tag", default="_final", help="exp_tag")
     ################################################
     # Special Parameters for DSAC-U
     # 1. Epistemic-aware distributional value ensemble
@@ -43,7 +43,7 @@ if __name__ == "__main__":
     parser.add_argument("--auto_lambda", default=False, help="auto_lambda")
     parser.add_argument("--enable_epi_step_scale", default=True, help="enable_epi_step_scale")
     # 2. Aleatoric-pessimistic bias rectification
-    parser.add_argument("--beta", default=0.2, help="beta")
+    parser.add_argument("--beta", default=0, help="beta")
     parser.add_argument("--beta_learning_rate", type=float, default=5e-4)
     parser.add_argument("--freeze_early_beta", default=True, help="freeze_early_beta")
     parser.add_argument("--q_bias_lower_threshold", default=-50, help="q_bias_lower_threshold")

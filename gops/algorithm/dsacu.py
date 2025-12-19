@@ -437,8 +437,8 @@ class DSACU(AlgorithmBase):
             sigma_ratio = shared_ratio if self.share_sigma_step else default_sigma_ratio
 
             if self.use_huber_loss:
-                q_ratio = q_ratio.clamp(min=0.02, max=50)
-                sigma_ratio = sigma_ratio.clamp(min=0.02, max=50)
+                q_ratio = q_ratio.clamp(min=0.1, max=10)
+                sigma_ratio = sigma_ratio.clamp(min=0.01, max=100)
                 q_loss = torch.mean(
                     q_ratio * (
                         huber_loss(qs[i], target_q, delta = 50, reduction='none')
