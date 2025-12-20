@@ -34,7 +34,7 @@ if __name__ == "__main__":
     parser.add_argument("--device", type=str, default="cpu", help="device")
     parser.add_argument("--seed", default=12345, help="Global seed")
     parser.add_argument("--use_huber_loss", default=True, help="use huber loss")
-    parser.add_argument("--exp_tag", default="_50_reward_scale", help="exp_tag")
+    parser.add_argument("--exp_tag", default="_final", help="exp_tag")
     ################################################
     # 1. Parameters for environment
     parser.add_argument("--reward_scale", type=float, default=50.0, help="reward scale factor")

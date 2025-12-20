@@ -42,6 +42,8 @@ class ApproxContainer(ApprBase):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         # create q networks
+        # self.device = device = kwargs.get("device")
+        # print("ApproxContainer device:", device)
         q_args = get_apprfunc_dict("value", **kwargs)
         self.q1: nn.Module = create_apprfunc(**q_args)
         self.q2: nn.Module = create_apprfunc(**q_args)
@@ -210,10 +212,10 @@ class DSACT(AlgorithmBase):
             loss_alpha.backward()
 
         tb_info = {
-            "DSAC2/critic_avg_q1-RL iter": q1.item(),
-            "DSAC2/critic_avg_q2-RL iter": q2.item(),
-            "DSAC2/critic_avg_std1-RL iter": std1.item(),
-            "DSAC2/critic_avg_std2-RL iter": std2.item(),
+            "DSAC2/critic_mean_q-RL iter": (q1.item() + q2.item()) / 2,
+            "DSAC2/critic_std_q-RL iter": abs(q1.item() - q2.item()) * 0.707 ,
+            "DSAC2/critic_mean_sigma-RL iter": (std1.item() + std2.item()) / 2,
+            "DSAC2/critic_std_sigma-RL iter": abs(std1.item() - std2.item()) * 0.707,
             "DSAC2/critic_avg_min_std1-RL iter": min_std1.item(),
             "DSAC2/critic_avg_min_std2-RL iter": min_std2.item(),
             tb_tags["loss_actor"]: loss_policy.item(),
@@ -222,8 +224,7 @@ class DSACT(AlgorithmBase):
             "DSAC2/policy_std-RL iter": policy_std,
             "DSAC2/entropy-RL iter": entropy.item(),
             "DSAC2/alpha-RL iter": self._get_alpha(),
-            "DSAC2/mean_std1": self.mean_std1,
-            "DSAC2/mean_std2": self.mean_std2,
+            "DSAC2/mean_sigmas": (self.mean_std1 + self.mean_std2) / 2,
             tb_tags["alg_time"]: (time.time() - start_time) * 1000,
         }
 
@@ -298,14 +299,31 @@ class DSACT(AlgorithmBase):
         bias = 0.1
 
         if self.use_huber_loss:
-            ratio1 = (torch.pow(self.mean_std1, 2) / (torch.pow(q1_std_detach, 2) + bias)).clamp(min=0.1, max=10)
-            ratio2 = (torch.pow(self.mean_std2, 2) / (torch.pow(q2_std_detach, 2) + bias)).clamp(min=0.1, max=10)
-            q1_loss = torch.mean(ratio1 *(huber_loss(q1, target_q1, delta = 50, reduction='none') 
-                                        + q1_std *(q1_std_detach.pow(2) - huber_loss(q1.detach(), target_q1_bound, delta = 50, reduction='none'))/(q1_std_detach +bias)
-                                ))
-            q2_loss = torch.mean(ratio2 *(huber_loss(q2, target_q2, delta = 50, reduction='none')
-                                        + q2_std *(q2_std_detach.pow(2) - huber_loss(q2.detach(), target_q2_bound, delta = 50, reduction='none'))/(q2_std_detach +bias)
-                                ))
+            ratio1 = (torch.pow(self.mean_std1, 2) / (torch.pow(q1_std_detach, 2) + bias))
+            ratio2 = (torch.pow(self.mean_std2, 2) / (torch.pow(q2_std_detach, 2) + bias))
+            q_ratio1 = ratio1.clamp(min=0.1, max=10)
+            q_ratio2 = ratio2.clamp(min=0.1, max=10)
+            sigma_ratio1 = ratio1.clamp(min=0.1, max=10)
+            sigma_ratio2 = ratio2.clamp(min=0.1, max=10)
+            q1_loss = torch.mean(
+                q_ratio1 * (
+                    huber_loss(q1, target_q1, delta = 50, reduction='none') 
+                ) + \
+                sigma_ratio1 * q1_std * (
+                    q1_std_detach.pow(2) - huber_loss(
+                        q1.detach(), target_q1_bound, delta = 50, reduction='none'
+                    )
+                ) / (q1_std_detach + bias)
+            )
+            q2_loss = torch.mean(
+                q_ratio2 * (
+                    huber_loss(q2, target_q2, delta = 50, reduction='none')
+                ) + \
+                sigma_ratio2 * q2_std * ( 
+                    q2_std_detach.pow(2) - huber_loss(
+                        q2.detach(), target_q2_bound, delta = 50, reduction='none')
+                ) / (q2_std_detach + bias)
+            )
         else:
             q1_loss = (torch.pow(self.mean_std1, 2) + bias) * torch.mean(
                 -(target_q1 - q1).detach() / ( torch.pow(q1_std_detach, 2)+ bias)*q1

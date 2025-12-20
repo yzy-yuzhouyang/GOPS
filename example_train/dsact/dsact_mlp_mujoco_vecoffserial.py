@@ -28,17 +28,17 @@ if __name__ == "__main__":
 
     ################################################
     # Key Parameters for users
-    parser.add_argument("--env_id", type=str, default="gymna_humanoidstandup", help="id of environment")
+    parser.add_argument("--env_id", type=str, default="gym_humanoid", help="id of environment")
     parser.add_argument("--algorithm", type=str, default="DSACT", help="RL algorithm")
     parser.add_argument("--enable_cuda", default=True, help="Enable CUDA")
-    parser.add_argument("--seed", default=12345, help="Global seed")
-    parser.add_argument("--use_huber_loss", default=True, help="use huber loss")
+    parser.add_argument("--seed", default=52345, help="Global seed")
+    parser.add_argument("--use_huber_loss", default=False, help="use huber loss")
     ################################################
     # 1. Parameters for environment
     parser.add_argument("--vector_env_num", type=int, default=4, help="Number of vector envs")
     parser.add_argument("--vector_env_type", type=str, default='async', help="Options: sync/async")
     parser.add_argument("--gym2gymnasium", type=bool, default=True, help="Convert Gym-style env to Gymsnaium-style")
-    parser.add_argument("--reward_scale", type=float, default=1.0, help="reward scale factor")
+    parser.add_argument("--reward_scale", type=float, default=0.1, help="reward scale factor")
     parser.add_argument("--is_render", type=bool, default=False, help="Draw environment animation")
     parser.add_argument("--is_adversary", type=bool, default=False, help="Adversary training")
 
@@ -101,7 +101,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--trainer",
         type=str,
-        default="off_serial_trainer",
+        default="off_serial_dsact_trainer",
         help="Options: on_serial_trainer, on_sync_trainer, off_serial_trainer, off_async_trainer",
     )
     # Maximum iteration number
@@ -136,7 +136,7 @@ if __name__ == "__main__":
 
     ################################################
     # 6. Parameters for evaluator
-    parser.add_argument("--evaluator_name", type=str, default="evaluator")
+    parser.add_argument("--evaluator_name", type=str, default="evaluator_dsact")
     parser.add_argument("--num_eval_episode", type=int, default=10)
     parser.add_argument("--eval_interval", type=int, default=2500)
     parser.add_argument("--eval_save", type=str, default=False, help="save evaluation data")
