@@ -118,7 +118,7 @@ def init_args(env, **args):
             config_string += '-auto_lambda' if args["auto_lambda"] else ''
             config_string += '-share_q_step' if args["share_q_step"] else ''
             config_string += '-share_sigma_step' if args["share_sigma_step"] else ''
-            config_string += '-share_target' if args["share_target"] else ''
+            config_string += '-share_sigma_target' if args["share_sigma_target"] else ''
             config_string += '-entropy_scale' if args["entropy_scale_ratio"] != 1.0 else ''
             config_string += args["exp_tag"]
             args["save_folder"] = os.path.join(

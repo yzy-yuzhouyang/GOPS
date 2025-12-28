@@ -137,9 +137,10 @@ class DSACU(AlgorithmBase):
         self.lambda_lower = kwargs["lambda_lower"]
         self.lambda_upper = kwargs["lambda_upper"]
         self.enable_epi_step_scale = kwargs["enable_epi_step_scale"]
+        self.use_homogeneous_sigma_step_ratio = kwargs["use_homogeneous_sigma_step_ratio"]
         self.share_q_step = kwargs['share_q_step']
         self.share_sigma_step = kwargs['share_sigma_step']
-        self.share_target = kwargs['share_target']
+        self.share_sigma_target = kwargs['share_sigma_target']
         self.use_huber_loss = kwargs['use_huber_loss']
         self.q_bias_lower_threshold = kwargs["q_bias_lower_threshold"]
 
@@ -389,7 +390,7 @@ class DSACU(AlgorithmBase):
                 self.mean_uncertainty = (1 - self.tau_b) * self.mean_uncertainty + \
                     self.lambda_lower * self.tau_b * torch.mean(uncertainty.detach())
                 
-            if self.share_target:
+            if self.share_sigma_target:
                 distances = torch.abs(q_next_tensor - target_q_next.unsqueeze(0))
                 closest_indices = torch.argmin(distances, dim=0)  # [B]
                 zs_next_tensor = torch.stack(zs_next)  # [num_q, B]
@@ -413,7 +414,7 @@ class DSACU(AlgorithmBase):
                 qs[i].detach(),
                 self.mean_sigmas[i].detach(),
                 target_q_next.detach(),
-                shared_zs_next if self.share_target else zs_next[i].detach(),
+                shared_zs_next if self.share_sigma_target else zs_next[i].detach(),
                 log_prob_act2.detach(),
             )
             
@@ -423,41 +424,71 @@ class DSACU(AlgorithmBase):
                     (torch.pow(self.mean_sigmas[i], 2) + self.mean_u_epistemic + bias) / \
                     (torch.pow(sigma_detach, 2) + u_epistemic + bias)
                 )
-                default_sigma_ratio = (
-                    (torch.pow(self.mean_sigmas[i], 2) + bias) / \
-                    (torch.pow(sigma_detach, 2) + bias)
-                )
             else:
                 default_q_ratio = (
                     (torch.pow(self.mean_sigmas[i], 2) + bias) / \
                     (torch.pow(sigma_detach, 2) + bias)
                 )
-                default_sigma_ratio = default_q_ratio
+            if self.use_homogeneous_sigma_step_ratio:
+                default_sigma_ratio = (
+                    (torch.pow(self.mean_sigmas[i], 2) + bias) / \
+                    (torch.pow(sigma_detach, 2) + bias)
+                )
+            else:
+                default_sigma_ratio = (
+                    (torch.pow(self.mean_sigmas[i], 2) + bias) / \
+                    (torch.pow(sigma_detach, 3) + bias)
+                )
             q_ratio = shared_ratio if self.share_q_step else default_q_ratio
             sigma_ratio = shared_ratio if self.share_sigma_step else default_sigma_ratio
 
             if self.use_huber_loss:
                 q_ratio = q_ratio.clamp(min=0.1, max=10)
-                sigma_ratio = sigma_ratio.clamp(min=0.01, max=100)
-                q_loss = torch.mean(
-                    q_ratio * (
-                        huber_loss(qs[i], target_q, delta = 50, reduction='none')
-                    ) + \
-                    sigma_ratio * sigmas[i] * (
-                        sigma_detach.pow(2) - huber_loss(
-                            target_q.detach(), target_z_bound, delta = 50, reduction='none'
+                if self.use_homogeneous_sigma_step_ratio:
+                    sigma_ratio = sigma_ratio.clamp(min=0.01, max=100)
+                    q_loss = torch.mean(
+                        q_ratio * (
+                            huber_loss(qs[i], target_q, delta = 50, reduction='none')
+                        ) + \
+                        sigma_ratio * sigmas[i] * (
+                            sigma_detach.pow(2) - huber_loss(
+                                target_q.detach(), target_z_bound, delta = 50, reduction='none'
+                            )
+                        ) / (sigma_detach + bias)
+                    )
+                else:
+                    min_sigma_ratio = 0.1 / (sigma_detach + bias)
+                    max_sigma_ratio = 10 / (sigma_detach + bias)
+                    sigma_ratio = sigma_ratio.clamp(min=min_sigma_ratio, max=max_sigma_ratio)
+                    q_loss = torch.mean(
+                        q_ratio * (
+                            huber_loss(qs[i], target_q, delta = 50, reduction='none')
+                        ) + \
+                        sigma_ratio * sigmas[i] * (
+                            sigma_detach.pow(2) - huber_loss(
+                                target_q.detach(), target_z_bound, delta = 50, reduction='none'
+                            )
                         )
-                    ) / (sigma_detach + bias)
-                )
+                    )
             else:
-                q_loss = - torch.mean(
-                    q_ratio * qs[i] * (
-                        (target_q - qs[i]).detach()
-                    ) + \
-                    sigma_ratio * sigmas[i] * (
-                        torch.pow(qs[i].detach() - target_z_bound, 2) - sigma_detach.pow(2)
-                    ) / (sigma_detach + bias)
-                )
+                if self.use_homogeneous_sigma_step_ratio:
+                    q_loss = - torch.mean(
+                        q_ratio * qs[i] * (
+                            (target_q - qs[i]).detach()
+                        ) + \
+                        sigma_ratio * sigmas[i] * (
+                            torch.pow(qs[i].detach() - target_z_bound, 2) - sigma_detach.pow(2)
+                        ) / (sigma_detach + bias)
+                    )
+                else:
+                    q_loss = - torch.mean(
+                        q_ratio * qs[i] * (
+                            (target_q - qs[i]).detach()
+                        ) + \
+                        sigma_ratio * sigmas[i] * (
+                            torch.pow(qs[i].detach() - target_z_bound, 2) - sigma_detach.pow(2)
+                        )
+                    )
 
             total_loss += q_loss
 

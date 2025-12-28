@@ -31,29 +31,32 @@ if __name__ == "__main__":
     parser.add_argument("--env_id", type=str, default="gym_humanoid", help="id of environment") #gym_halfcheetah
     parser.add_argument("--algorithm", type=str, default="DSACU", help="RL algorithm")
     parser.add_argument("--enable_cuda", default=True, help="Enable CUDA")
-    parser.add_argument("--seed", default=52345, help="Global seed")
+    parser.add_argument("--seed", default=22345, help="Global seed")
     parser.add_argument("--use_huber_loss", default=False, help="use huber loss")
     parser.add_argument("--entropy_scale_ratio", default=1.0, help="entropy_scale_ratio")
-    parser.add_argument("--exp_tag", default="_final", help="exp_tag")
+    parser.add_argument("--exp_tag", default="_try", help="exp_tag")
     ################################################
     # Special Parameters for DSAC-U
-    # 1. Epistemic-aware distributional value ensemble
+    # 1. Uncertainty Isolation
     parser.add_argument("--num_q", default=4, help="num_q")
-    parser.add_argument("--lambda_lower", default=1.0, help="lambda_lower")
+    parser.add_argument("--lambda_lower", default=0.5, help="lambda_lower")
     parser.add_argument("--auto_lambda", default=False, help="auto_lambda")
+    # 2. Impulse Suppression
+    # 2.1 Gradient modulation
     parser.add_argument("--enable_epi_step_scale", default=True, help="enable_epi_step_scale")
-    # 2. Aleatoric-pessimistic bias rectification
-    parser.add_argument("--beta", default=0, help="beta")
+    parser.add_argument("--use_homogeneous_sigma_step_ratio", default=False, help="use_homogeneous_sigma_step_ratio")
+    # 2.2 Pessimistic target
+    parser.add_argument("--beta", default=0.2, help="beta")
     parser.add_argument("--beta_learning_rate", type=float, default=5e-4)
     parser.add_argument("--freeze_early_beta", default=True, help="freeze_early_beta")
     parser.add_argument("--q_bias_lower_threshold", default=-50, help="q_bias_lower_threshold")
-    # 3. Exploration-optimistic policy improvement
-    parser.add_argument("--lambda_upper", default=1.0, help="lambda_upper")
+    # 3. Exploration Compensation
+    parser.add_argument("--lambda_upper", default=0.5, help="lambda_upper")
     parser.add_argument("--mix_mode", default="default", help="mix_policy")
     # 4. Others
     parser.add_argument("--share_q_step", default=False, help="share_q_step")
     parser.add_argument("--share_sigma_step", default=False, help="share_sigma_step")
-    parser.add_argument("--share_target", default=False, help="share_target")
+    parser.add_argument("--share_sigma_target", default=False, help="share_sigma_target")
     ################################################
     # 1. Parameters for environment
     parser.add_argument("--vector_env_num", type=int, default=4, help="Number of vector envs")

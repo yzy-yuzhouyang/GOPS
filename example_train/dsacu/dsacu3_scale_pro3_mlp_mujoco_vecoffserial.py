@@ -38,7 +38,7 @@ if __name__ == "__main__":
     parser.add_argument("--num_q", default=2, help="num_q")
     parser.add_argument("--lambda_lower", default=0.5, help="lambda_lower")
     parser.add_argument("--lambda_upper", default=0.5, help="lambda_upper")
-    parser.add_argument("--share_target", default=False, help="share_target")
+    parser.add_argument("--share_sigma_target", default=False, help="share_sigma_target")
     parser.add_argument("--mix_policy", default=True, help="mix_policy")
     ################################################
     # 1. Parameters for environment

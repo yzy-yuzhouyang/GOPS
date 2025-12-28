@@ -139,7 +139,7 @@ class DSACU3SCALEPro3(AlgorithmBase):
         self.max_iteration = kwargs['max_iteration']
         self.lambda_lower = kwargs["lambda_lower"]
         self.lambda_upper = kwargs["lambda_upper"]
-        self.share_target = kwargs['share_target']
+        self.share_sigma_target = kwargs['share_sigma_target']
 
     @property
     def adjustable_parameters(self):
@@ -410,7 +410,7 @@ class DSACU3SCALEPro3(AlgorithmBase):
                 self.mean_uncertainty = (1 - self.tau_b) * self.mean_uncertainty + \
                                         self.lambda_lower * self.tau_b * torch.mean(uncertainty.detach())   
                     
-            if self.share_target:
+            if self.share_sigma_target:
                 # 找到离q_next最近的q_next_means的索引
                 distances = torch.abs(q_next_all - q_next.unsqueeze(0))  
                 avg_distances = torch.mean(distances, dim=1)  # [num_q]
@@ -433,7 +433,7 @@ class DSACU3SCALEPro3(AlgorithmBase):
                 q_means[i].detach(),
                 self.mean_stds[i].detach(),
                 q_next.detach(),
-                shared_q_next_sample if self.share_target else q_next_samples[i].detach(),
+                shared_q_next_sample if self.share_sigma_target else q_next_samples[i].detach(),
                 log_prob_act2.detach(),
             )
             
