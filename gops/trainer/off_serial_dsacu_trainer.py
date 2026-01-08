@@ -56,6 +56,7 @@ class OffSerialDsacuTrainer:
         self.overestimation = 0
         self.update_beta = False
         self.early_stage_flag = kwargs["freeze_early_beta"]
+        self.q_bias_lower_threshold = kwargs["q_bias_lower_threshold"]
         self.use_optimistic_behavior_policy = kwargs["lambda_upper"]
         self.mix_mode = kwargs["mix_mode"]
 
@@ -169,7 +170,7 @@ class OffSerialDsacuTrainer:
                 objID = next(self.evluate_tasks.completed())[1]
                 avg_tb_eval_dict = ray.get(objID)
                 if self.early_stage_flag:
-                    if avg_tb_eval_dict['mean_q_bias'] > 0:
+                    if avg_tb_eval_dict['mean_q_bias'] > 0.2 * self.q_bias_lower_threshold:
                         self.early_stage_flag = False
                     self.overestimation = 0
                 else:

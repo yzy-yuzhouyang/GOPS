@@ -35,7 +35,7 @@ if __name__ == "__main__":
     parser.add_argument("--seed", default=12345, help="Global seed")
     parser.add_argument("--use_huber_loss", default=True, help="use huber loss")
     parser.add_argument("--entropy_scale_ratio", default=1.0, help="entropy_scale_ratio")
-    parser.add_argument("--exp_tag", default="_final", help="exp_tag")
+    parser.add_argument("--exp_tag", default="_AID", help="exp_tag")
     ################################################
     # Special Parameters for DSAC-U
     # 1. Uncertainty Isolation
@@ -70,7 +70,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--value_func_name",
         type=str,
-        default="ActionValueDistri",
+        default="ActionValueEnhancedDistri",
         help="Options: StateValue/ActionValue/ActionValueDis/ActionValueDistri",
     )
     parser.add_argument("--value_func_type", type=str, default="MLP", help="Options: MLP/CNN/CNN_SHARED/RNN/POLY/GAUSS")
@@ -85,7 +85,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--policy_func_name",
         type=str,
-        default="StochaPolicy",
+        default="EnhancedStochaPolicy",
         help="Options: None/DetermPolicy/FiniteHorizonPolicy/StochaPolicy",
     )
     parser.add_argument(
@@ -110,8 +110,8 @@ if __name__ == "__main__":
 
     ################################################
     # 3. Parameters for RL algorithm
-    parser.add_argument("--value_learning_rate", type=float, default=0.0001)
-    parser.add_argument("--policy_learning_rate", type=float, default=0.0001)
+    parser.add_argument("--value_learning_rate", type=float, default=0.0003)
+    parser.add_argument("--policy_learning_rate", type=float, default=0.0003)
     parser.add_argument("--alpha_learning_rate", type=float, default=0.0003)
     # special parameter
     parser.add_argument("--gamma", type=float, default=0.99)
