@@ -29,10 +29,11 @@ if __name__ == "__main__":
 
     ################################################
     # Key Parameters for users
-    parser.add_argument("--env_id", type=str, default="gymna_humanoidstandup", help="id of environment")
+    parser.add_argument("--env_id", type=str, default="dmc_dogrun", help="id of environment")
     parser.add_argument("--algorithm", type=str, default="PPO", help="RL algorithm")
     parser.add_argument("--enable_cuda", default=True, help="Disable CUDA")
-    parser.add_argument("--seed", default=52345, help="Global seed")
+    parser.add_argument("--seed", default=12345, help="Global seed")
+    parser.add_argument("--exp_tag", default="_nn_align", help="exp_tag")
 
     ################################################
     # 1. Parameters for environment
@@ -50,7 +51,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--value_func_type", type=str, default="MLP", help="Options: MLP/CNN/CNN_SHARED/RNN/POLY/GAUSS")
     value_func_type = parser.parse_known_args()[0].value_func_type
-    parser.add_argument("--value_hidden_sizes", type=list, default=[64, 64])
+    parser.add_argument("--value_hidden_sizes", type=list, default=[256, 256, 256])
     parser.add_argument(
         "--value_hidden_activation", type=str, default="tanh", help="Options: relu/gelu/elu/selu/sigmoid/tanh"
     )
@@ -74,7 +75,7 @@ if __name__ == "__main__":
         help="Options: default/TanhGaussDistribution/GaussDistribution",
     )
     policy_func_type = parser.parse_known_args()[0].policy_func_type
-    parser.add_argument("--policy_hidden_sizes", type=list, default=[64, 64])
+    parser.add_argument("--policy_hidden_sizes", type=list, default=[256, 256, 256])
     parser.add_argument(
         "--policy_hidden_activation", type=str, default="tanh", help="Options: relu/gelu/elu/selu/sigmoid/tanh"
     )
@@ -96,7 +97,7 @@ if __name__ == "__main__":
         help="Options: on_serial_trainer, on_sync_trainer, off_serial_trainer, off_async_trainer",
     )
     # Maximum iteration number
-    parser.add_argument("--max_iteration", type=int, default=15000)
+    parser.add_argument("--max_iteration", type=int, default=20000)
     trainer_type = parser.parse_known_args()[0].trainer
     parser.add_argument(
         "--ini_network_dir",
@@ -143,7 +144,7 @@ if __name__ == "__main__":
     # 7. Parameters for evaluator
     parser.add_argument("--evaluator_name", type=str, default="evaluator")
     parser.add_argument("--num_eval_episode", type=int, default=10)
-    parser.add_argument("--eval_interval", type=int, default=25)
+    parser.add_argument("--eval_interval", type=int, default=100)
     parser.add_argument("--eval_save", type=str, default=False, help="save evaluation data")
 
     ################################################
@@ -151,7 +152,7 @@ if __name__ == "__main__":
     parser.add_argument("--save_folder", type=str, default=None)
     # Save value/policy every N updates
     parser.add_argument(
-        "--apprfunc_save_interval", type=int, default=500,
+        "--apprfunc_save_interval", type=int, default=5000,
     )
     # Save key info every N updates
     parser.add_argument(

@@ -43,9 +43,11 @@ def register(
 from gops.trainer.evaluator import Evaluator
 from gops.trainer.evaluator_dsacu import EvaluatorDsacu
 from gops.trainer.evaluator_dsact import EvaluatorDsact
+from gops.trainer.evaluator_sac import EvaluatorSac
 register(evaluator_name="evaluator", entry_point=Evaluator)
 register(evaluator_name="evaluator_dsacu", entry_point=EvaluatorDsacu)
 register(evaluator_name="evaluator_dsact", entry_point=EvaluatorDsact)
+register(evaluator_name="evaluator_sac", entry_point=EvaluatorSac)
 
 def create_evaluator(evaluator_name: str, **kwargs) -> object:
     spec_ = registry.get(evaluator_name)
