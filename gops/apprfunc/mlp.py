@@ -298,26 +298,17 @@ class RegularizedStochaPolicy(nn.Module, Action_Distribution):
         curr_dim = input_dim
         for h_dim in hidden_sizes:
             layers.append(nn.Linear(curr_dim, h_dim))
-            # GroupNorm (affine=False), 默认16组
             num_groups = 16 if h_dim % 16 == 0 else 1
             layers.append(nn.GroupNorm(num_groups=num_groups, num_channels=h_dim, affine=False))
-            # Activation
-            if self.activation == "relu":
-                layers.append(nn.ReLU())
-            elif self.activation == "mish":
-                layers.append(nn.Mish())
-            else:
-                layers.append(nn.ReLU())
+            layers.append(nn.ReLU()) # Hard-coded default ReLU activation function
             curr_dim = h_dim
         return nn.Sequential(*layers)
 
     def _init_weights(self, m):
-        # 默认所有 Linear 层使用 gain=sqrt(2)
         if isinstance(m, nn.Linear):
             orthogonal_init_(m, gain=np.sqrt(2))
 
     def _init_heads(self):
-        # 将输出头的 gain 重置为 1.0 (DoubleGum 设定)
         heads = []
         if self.std_type == "mlp_separated":
             heads = [self.mean_head, self.log_std_head]
@@ -446,7 +437,7 @@ class RegularizedActionValueDistri(nn.Module):
         for h_dim in hidden_sizes:
             self.layers.append(nn.Linear(input_dim, h_dim))
             self.layers.append(nn.GroupNorm(num_groups=16, num_channels=h_dim, affine=False))
-            self.layers.append(nn.ReLU()) # Default ReLU activation
+            self.layers.append(nn.ReLU()) # Hard-coded default ReLU activation function
             input_dim = h_dim
 
         self.mean_head = nn.Linear(input_dim, 1)

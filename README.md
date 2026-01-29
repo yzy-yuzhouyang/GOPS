@@ -1,88 +1,86 @@
-# GOPS (General Optimal control Problem Solver)
+# Taming the Aleatoric Impulse in Off-Policy Reinforcement Learning
 
-[![Read the Docs](https://img.shields.io/readthedocs/gops)](https://gops.readthedocs.io/en/latest/)
+This repository contains the official implementation of **DSAC-AID**. 
+The code is built upon the **GOPS** framework (General Optimal control Problem Solver).
+To respect the original license, we have retained the original file headers containing author names (e.g., "GOPS Team"). 
+**Please note that these identities belong to the original framework developers, NOT the authors of this double-blind submission.**
 
-Copyright © 2022 Intelligent Driving Laboratory (iDLab). All rights reserved.
+## 1. Installation
 
-## Description
-Optimal control is an important theoretical framework for sequential decision-making and control of industrial objects, especially for complex and high-dimensional problems with strong nonlinearity, high randomness, and multiple constraints.
-Solving the optimal control input is the key to applying this theoretical framework to practical industrial problems.
-Taking Model Predictive Control as an example, computation time solving its control input relies on receding horizon optimization, of which the real-time performance greatly restricts the application and promotion of this method.
-In order to solve this problem, iDLab has developed a series of full state space optimal strategy solution algorithms and the set of application toolchain for industrial control based on Reinforcement Learning and Approximate Dynamic Programming theory.
-The basic principle of this method takes an approximation function (such as neural network) as the policy carrier, and improves the online real-time performance of optimal control by offline solving and online application.
-The GOPS toolchain will cover the following main links in the whole industrial control process, including control problem modeling, policy network training, offline simulation verification, controller code deployment, etc.
-GOPS currently supports the following algorithms:
-- [Deep Q Network (DQN)](https://arxiv.org/abs/1312.5602)
-- [Deep Deterministic Policy Gradient (DDPG)](https://arxiv.org/abs/1509.02971)
-- [Twin Delayed DDPG (TD3)](https://arxiv.org/abs/1802.09477)
-- [Asynchronous Advantage Actor-Critic (A3C)](https://arxiv.org/abs/1602.01783)
-- [Soft Actor-Critic (SAC)](https://arxiv.org/abs/1801.01290)
-- [Distributional Soft Actor-Critic (DSAC)](https://arxiv.org/abs/2001.02811)
-- [Trust Region Policy Optimization (TRPO)](https://arxiv.org/abs/1502.05477)
-- [Proximal Policy Optimization (PPO)](https://arxiv.org/abs/1707.06347)
-- [Infinite-Horizon Approximate Dynamic Programming (INFADP)](https://link.springer.com/book/10.1007/978-981-19-7784-8)
-- [Finite-Horizon Approximate Dynamic Programming (FHADP)](https://link.springer.com/book/10.1007/978-981-19-7784-8)
-- [Mixed Actor-Critic (MAC)](https://ieeexplore.ieee.org/document/9268413)
-- [Mixed Policy Gradient (MPG)](https://arxiv.org/abs/2102.11513)
-- [Separated Proportional-Integral Lagrangian (SPIL)](https://arxiv.org/abs/2102.08539)
+### 1.1 Basic Installation (CPU-only)
+Navigate to the root directory and set up the base environment using Conda. By default, this installs the CPU version of PyTorch.
 
-## Installation
-GOPS requires:
-1. Windows 7 or greater or Linux.
-2. Python 3.6 or greater (GOPS V1.0 precompiled Simulink models use Python 3.8). We recommend using Python 3.8.
-3. (Optional) Matlab/Simulink 2018a or greater.
-4. The installation path must be in English.
-
-You can install GOPS through the following steps:
-1. clone GOPS repository
 ```bash
-git clone https://github.com/Intelligent-Driving-Laboratory/GOPS.git
 cd GOPS
-```
-2. create conda environment depending on your OS:
-```bash
-conda env create -f gops_environment.nix.yml  # for Linux
+
+# Create the environment from the provided YAML file (for Linux)
+conda env create -f gops_environment.nix.yml
+# Create the environment from the provided YAML file (for Windows)
+conda env create -f gops_environment.win.yml
+
+# Initialize Conda (if not already initialized)
+conda init
+source ~/.bashrc
+
+# Activate the environment and install the package
 conda activate gops
-```
-or
-```bash
-conda env create -f gops_environment.win.yml  # for Windows
-conda activate gops
-```
-3. install GOPS
-```bash
 pip install -e .
 ```
-4. (Optional) if you plan to use the MPC-based optimal controller implemented in GOPS, install `cyipopt`:
+
+### 1.2 GPU Acceleration (Optional but Recommended)
+To enable CUDA support, you must replace the CPU-only PyTorch with the CUDA-enabled version.
+Note: The example below uses CUDA 12.4. Please adjust the URL according to your specific CUDA version.
 ```bash
-conda install -c conda-forge cyipopt
+conda activate gops
+
+# Uninstall CPU versions
+pip uninstall torch torchvision torchaudio -y
+
+# Install CUDA versions
+pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu124
+```
+## 2. Benchmark Support
+
+### Option A: DeepMind Control Suite (DMC)
+
+```bash
+# 1. Clone the base environment to a new env named 'gops_dmc'
+conda create --name gops_dmc --clone gops
+conda activate gops_dmc
+
+# 2. Install DMC-specific dependencies
+pip install dm-control==1.0.16 mujoco==3.1.2 numpy==1.24.4
 ```
 
-## Documentation
-The tutorials and API documentation are hosted on [gops.readthedocs.io](https://gops.readthedocs.io/en/latest/).
-
-## Quick Start
-This is an example of running finite-horizon Approximate Dynamic Programming (FHADP) on inverted double pendulum environment. 
-Train the policy by running:
+### Option B: OpenAI Gym MuJoCo
+Prerequisites:
+You must download the legacy MuJoCo binaries (e.g., mujoco210) and extract them to ~/.mujoco/mujoco210.
 ```bash
-python example_train/fhadp/fhadp_mlp_idpendulum_serial.py
+# 1. Clone the base environment (naming it gops_gym to avoid conflict with DMC)
+conda create --name gops_mujoco --clone gops
+conda activate gops_gym
+
+# 2. Ensure gym and mujoco-py are installed
+pip install gym==0.26.2 mujoco-py==2.1.2.14
 ```
-After training, test the policy by running:
+## 3. Training
+Training scripts are located in the `example_train/dsacaid/` directory.
+
+### 3.1 Training Modes
+We provide two sampling modes, distinguished by the script filename suffix:
+
+- Parallel Sampling (_vecoffserial.py): Uses vectorized environments to collect data in parallel. (Recommended)
+
+- Serial Sampling (_offserial.py): Uses a single environment instance for serial data collection.
+
+### 3.2 Usage Examples
+Example 1: Serial Training on DMC Humanoid
 ```bash
-python example_run/run_idp_fhadp.py
+conda activate gops_dmc
+python example_train/dsacaid/dsacaid_mlp_dmc_vecoffserial.py
 ```
-You can record a video by setting `save_render=True` in the test file. Here is a video of running a trained policy on the task:
-
-<div align=center>
-<video src=https://github.com/Intelligent-Driving-Laboratory/GOPS/assets/113587370/a095e8a2-5732-470e-9116-2d592eb8e3c6></video>
-</div>
-
-## WeChat Group
-In order to make it easier for everyone to use GOPS and build a good community, we have established a WeChat group for GOPS users and invite interested users to join by scanning the QR code below.
-Developers will answer questions for users in the group when using GOPS, and will fix problems in GOPS based on user feedback. In addition, the release of a new version of GOPS will also be notified in the group.
-
-Thanks to all users for your support of GOPS and to all developers for your contributions to GOPS. Let's work together to make GOPS a valuable, easy-to-use, and popular software!
-
-<div align=center>
-<img src=https://github.com/Intelligent-Driving-Laboratory/GOPS_DOC/blob/master/docs/source/figures%26videos/QR_code.jpg width="40%">
-</div>
+Example 2: Parallel Training on Gym-MuJoCo
+```bash
+conda activate gops_mujoco
+python example_train/dsacaid/dsacaid_mlp_mujoco_vecoffserial.py
+```

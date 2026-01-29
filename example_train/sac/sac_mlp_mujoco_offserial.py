@@ -1,15 +1,3 @@
-#  Copyright (c). All Rights Reserved.
-#  General Optimal control Problem Solver (GOPS)
-#  Intelligent Driving Lab(iDLab), Tsinghua University
-#
-#  Creator: iDLab
-#  Lab Leader: Prof. Shengbo Eben Li
-#  Email: lisb04@gmail.com
-#
-#  Description: example for sac + humanoidconti + mlp + off_serial
-#  Update Date: 2021-06-11, Yang Yujie: create example
-
-
 import argparse
 
 from gops.create_pkg.create_alg import create_alg
@@ -84,7 +72,7 @@ if __name__ == "__main__":
     parser.add_argument("--q_learning_rate", type=float, default=0.0001)
     parser.add_argument("--policy_learning_rate", type=float, default=0.0001)
     parser.add_argument("--alpha_learning_rate", type=float, default=0.0003)
-    # special parameterq
+    # special parameter
     parser.add_argument("--gamma", type=float, default=0.99)
     parser.add_argument("--tau", type=float, default=0.005)
     parser.add_argument("--auto_alpha", type=bool, default=True)

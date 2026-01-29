@@ -1,15 +1,3 @@
-#  Copyright (c). All Rights Reserved.
-#  General Optimal control Problem Solver (GOPS)
-#  Intelligent Driving Lab(iDLab), Tsinghua University
-#
-#  Creator: iDLab
-#  Lab Leader: Prof. Shengbo Eben Li
-#  Email: lisb04@gmail.com
-#
-#  Description: example for ppo + pendulum+ mlp + on_serial
-#  Update Date: 2021-06-11, Li Jie: create example
-
-
 import argparse
 
 from gops.create_pkg.create_alg import create_alg
