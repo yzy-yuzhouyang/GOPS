@@ -19,7 +19,7 @@ import numpy as np
 from gops.trainer.sampler.base import BaseSampler, Experience
 
 
-class OffDsacuSampler(BaseSampler):
+class OffDsacaidSampler(BaseSampler):
     def __init__(
         self, 
         sample_batch_size,

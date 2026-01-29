@@ -31,8 +31,7 @@ if __name__ == "__main__":
     parser.add_argument("--env_id", type=str, default="gym_humanoid", help="id of environment")
     parser.add_argument("--algorithm", type=str, default="DSACT", help="RL algorithm")
     parser.add_argument("--enable_cuda", default=True, help="Enable CUDA")
-    parser.add_argument("--seed", default=52345, help="Global seed")
-    parser.add_argument("--use_huber_loss", default=False, help="use huber loss")
+    parser.add_argument("--seed", default=12345, help="Global seed")
     ################################################
     # 1. Parameters for environment
     parser.add_argument("--vector_env_num", type=int, default=4, help="Number of vector envs")
@@ -90,6 +89,7 @@ if __name__ == "__main__":
     parser.add_argument("--value_learning_rate", type=float, default=0.0001)
     parser.add_argument("--policy_learning_rate", type=float, default=0.0001)
     parser.add_argument("--alpha_learning_rate", type=float, default=0.0003)
+    parser.add_argument("--use_huber_loss", default=False, help="Use huber loss")
     # special parameter
     parser.add_argument("--gamma", type=float, default=0.99)
     parser.add_argument("--tau", type=float, default=0.005)

@@ -108,12 +108,12 @@ def init_args(env, **args):
         dir_path = os.path.dirname(__file__)
         dir_path = os.path.dirname(dir_path)
         dir_path = os.path.dirname(dir_path)
-        if args["algorithm"] in ["DSACU"]:
+        if args["algorithm"] in ["DSACAID"]:
             config_string = f'-{args["num_q"]}' + \
                 f'-{args["beta"]}' + \
                 f'-{args["lambda_lower"]}' + \
                 f'-{args["lambda_upper"]}' + \
-                f'-{args["beta_learning_rate"]}_lr'
+                f'-{args["beta_annealing_rate"]}_lr'
             config_string += '' if args["mix_mode"] == "default" else f'-{args["mix_mode"]}'
             config_string += '-auto_lambda' if args["auto_lambda"] else ''
             config_string += '-share_q_step' if args["share_q_step"] else ''

@@ -26,37 +26,38 @@ if __name__ == "__main__":
     # Parameters Setup
     parser = argparse.ArgumentParser()
 
-    ################################################
+    # =========================================================================
     # Key Parameters for users
-    parser.add_argument("--env_id", type=str, default="gym_ant", help="id of environment") #gym_halfcheetah
-    parser.add_argument("--algorithm", type=str, default="DSACU", help="RL algorithm")
+    # =========================================================================
+    parser.add_argument("--env_id", type=str, default="gym_humanoid", help="Id of environment")
+    parser.add_argument("--algorithm", type=str, default="DSACAID", help="RL algorithm")
     parser.add_argument("--enable_cuda", default=True, help="Enable CUDA")
     parser.add_argument("--seed", default=12345, help="Global seed")
-    parser.add_argument("--use_huber_loss", default=False, help="use huber loss")
-    parser.add_argument("--entropy_scale_ratio", default=1.0, help="entropy_scale_ratio")
-    parser.add_argument("--exp_tag", default="_hetero_AID", help="exp_tag")
-    ################################################
-    # Special Parameters for DSAC-U
-    # 1. Uncertainty Isolation
-    parser.add_argument("--num_q", default=4, help="num_q")
-    parser.add_argument("--lambda_lower", default=0.71, help="lambda_lower")
-    parser.add_argument("--auto_lambda", default=False, help="auto_lambda")
-    # 2. Impulse Suppression
-    # 2.1 Gradient modulation
-    parser.add_argument("--enable_epi_step_scale", default=True, help="enable_epi_step_scale")
-    parser.add_argument("--use_homogeneous_sigma_step_ratio", default=False, help="use_homogeneous_sigma_step_ratio")
-    # 2.2 Pessimistic target
-    parser.add_argument("--beta", default=0.1, help="beta")
-    parser.add_argument("--beta_learning_rate", type=float, default=2.5e-4)
-    parser.add_argument("--freeze_early_beta", default=True, help="freeze_early_beta")
-    parser.add_argument("--q_bias_lower_threshold", default=-50, help="q_bias_lower_threshold")
-    # 3. Exploration Compensation
-    parser.add_argument("--lambda_upper", default=0, help="lambda_upper")
-    parser.add_argument("--mix_mode", default="default", help="mix_policy")
-    # 4. Others
-    parser.add_argument("--share_q_step", default=False, help="share_q_step")
-    parser.add_argument("--share_sigma_step", default=False, help="share_sigma_step")
-    parser.add_argument("--share_sigma_target", default=False, help="share_sigma_target")
+    parser.add_argument("--exp_tag", default="", help="Experiment tag for logging and identification")
+    # =========================================================================
+    # AID Mechanism Hyperparameters
+    # =========================================================================
+    # 1. Pessimistic Evaluation (Critic)
+    parser.add_argument("--num_q", default=4, help="Ensemble size")
+    # 1.1 Pessimistic target
+    parser.add_argument("--lambda_lower", type=float, default=1.0, help="Lower confidence bound coefficient")
+    parser.add_argument("--beta", type=float, default=0.2, help="Initial aleatoric pessimism coefficient")
+    parser.add_argument("--beta_annealing_rate", type=float, default=5e-4, help="Annealing rate for beta")
+    parser.add_argument("--freeze_early_beta", default=True, help="Whether to freeze beta decay during the initial warmup phase")
+    parser.add_argument("--q_bias_lower_threshold", default=-1000, help="Bias threshold to trigger or resume beta updates")
+    # 1.2 Gradient modulation
+    parser.add_argument("--use_homogeneous_sigma_step_ratio", default=True, help="Use homogeneous modulation ratio for sigma")
+    # 2. Optimistic exploration (Actor)
+    parser.add_argument("--lambda_upper", default=1.0, help="Upper confidence bound coefficient")
+    # 3. Legacy (Not used in formal experiments)
+    parser.add_argument("--auto_lambda", default=False, help="(Unused) Adaptively regulate confidence bound coefficient")
+    parser.add_argument("--enable_epi_step_scale", default=True, help="(Unused) Involve epistemic uncertainty in gradient modulation")
+    parser.add_argument("--share_q_step", default=False, help="(Unused) Share q step")
+    parser.add_argument("--share_sigma_step", default=False, help="(Unused) Share sigma step")
+    parser.add_argument("--share_sigma_target", default=False, help="(Unused) Share sigma target")
+    parser.add_argument("--mix_mode", default="default", help="(Unused) Sampling strategy mixing mode") 
+    parser.add_argument("--entropy_scale_ratio", default=1.0, help="(Unused) Scaling factor for target entropy")
+
     ################################################
     # 1. Parameters for environment
     parser.add_argument("--vector_env_num", type=int, default=4, help="Number of vector envs")
@@ -71,8 +72,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--value_func_name",
         type=str,
-        default="ActionValueEnhancedDistri",
-        help="Options: StateValue/ActionValue/ActionValueDis/ActionValueDistri",
+        default="ActionValueDistri",
+        help="RegularizedActionValueDistri/ActionValueDistri",
     )
     parser.add_argument("--value_func_type", type=str, default="MLP", help="Options: MLP/CNN/CNN_SHARED/RNN/POLY/GAUSS")
     value_func_type = parser.parse_known_args()[0].value_func_type
@@ -86,8 +87,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--policy_func_name",
         type=str,
-        default="EnhancedStochaPolicy",
-        help="Options: None/DetermPolicy/FiniteHorizonPolicy/StochaPolicy",
+        default="StochaPolicy",
+        help="Options: RegularizedStochaPolicy/StochaPolicy",
     )
     parser.add_argument(
         "--policy_func_type", type=str, default="MLP", help="Options: MLP/CNN/CNN_SHARED/RNN/POLY/GAUSS"
@@ -111,9 +112,10 @@ if __name__ == "__main__":
 
     ################################################
     # 3. Parameters for RL algorithm
-    parser.add_argument("--value_learning_rate", type=float, default=0.0003)
-    parser.add_argument("--policy_learning_rate", type=float, default=0.0003)
+    parser.add_argument("--value_learning_rate", type=float, default=0.0001)
+    parser.add_argument("--policy_learning_rate", type=float, default=0.0001)
     parser.add_argument("--alpha_learning_rate", type=float, default=0.0003)
+    parser.add_argument("--use_huber_loss", default=False, help="Use huber loss")
     # special parameter
     parser.add_argument("--gamma", type=float, default=0.99)
     parser.add_argument("--tau", type=float, default=0.005)
@@ -125,7 +127,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--trainer",
         type=str,
-        default="off_serial_dsacu_trainer",
+        default="off_serial_dsacaid_trainer",
         help="Options: on_serial_trainer, on_sync_trainer, off_serial_trainer, off_async_trainer",
     )
     # Maximum iteration number
@@ -152,7 +154,7 @@ if __name__ == "__main__":
 
     ################################################
     # 5. Parameters for sampler
-    parser.add_argument("--sampler_name", type=str, default="off_dsacu_sampler", help="Options: on_sampler/off_sampler")
+    parser.add_argument("--sampler_name", type=str, default="off_dsacaid_sampler", help="Options: on_sampler/off_sampler")
     # Batch size of sampler for buffer store
     parser.add_argument("--sample_batch_size", type=int, default=20)
     # Add noise to action for better exploration
@@ -160,7 +162,7 @@ if __name__ == "__main__":
 
     ################################################
     # 6. Parameters for evaluator
-    parser.add_argument("--evaluator_name", type=str, default="evaluator_dsacu")
+    parser.add_argument("--evaluator_name", type=str, default="evaluator_dsacaid")
     parser.add_argument("--num_eval_episode", type=int, default=10)
     parser.add_argument("--eval_interval", type=int, default=2500)
     parser.add_argument("--eval_save", type=str, default=False, help="save evaluation data")

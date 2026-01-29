@@ -42,8 +42,6 @@ class ApproxContainer(ApprBase):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         # create q networks
-        # self.device = device = kwargs.get("device")
-        # print("ApproxContainer device:", device)
         q_args = get_apprfunc_dict("value", **kwargs)
         self.q1: nn.Module = create_apprfunc(**q_args)
         self.q2: nn.Module = create_apprfunc(**q_args)

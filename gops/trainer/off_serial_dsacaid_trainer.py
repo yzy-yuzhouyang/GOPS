@@ -27,7 +27,7 @@ from gops.utils.tensorboard_setup import add_scalars, tb_tags
 from gops.utils.log_data import LogData
 
 
-class OffSerialDsacuTrainer:
+class OffSerialDsacaidTrainer:
     def __init__(self, alg, sampler, buffer, evaluator, **kwargs):
         self.alg = alg
         self.sampler = sampler
@@ -87,7 +87,6 @@ class OffSerialDsacuTrainer:
         # sampling
         if self.iteration % self.sample_interval == 0:
             if self.use_optimistic_behavior_policy:
-                # Mode 1
                 if self.mix_mode == "continue":
                     mix_ratio = 1 - self.networks.beta.item() / self.networks.beta_init
                     if mix_ratio > 1e-4 and mix_ratio < 1 - 1e-4:
@@ -99,19 +98,19 @@ class OffSerialDsacuTrainer:
                         self.sampler.use_target_policy = False
                     else:
                         self.sampler.use_target_policy = True
-
-                # Mode 2
                 elif self.mix_mode == "step":
                     if self.networks.beta.item() < 1e-6:
                         self.sampler.use_target_policy = True
                     else:
                         self.sampler.use_target_policy = False
-
+                # default: no mixing, directly use behavior policy.
                 elif self.mix_mode == "default":
                     self.sampler.use_target_policy = False
 
                 else:
-                    raise ValueError(f"不支持的mix_mode: {self.mix_mode}，当前仅支持 'continue' 和 'step' 模式")
+                    raise ValueError(
+                        f"unsupported mix_mode: {self.mix_mode}, only 'default', 'continue' and 'step' are supported."
+                    )
             else:
                 self.sampler.use_target_policy = True
             if self.device != "cpu":

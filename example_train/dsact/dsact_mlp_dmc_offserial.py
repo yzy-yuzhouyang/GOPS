@@ -28,13 +28,11 @@ if __name__ == "__main__":
 
     ################################################
     # Key Parameters for users
-    parser.add_argument("--env_id", type=str, default="dmc_dogrun", help="id of environment")
+    parser.add_argument("--env_id", type=str, default="dmc_humanoidrun", help="id of environment")
     parser.add_argument("--algorithm", type=str, default="DSACT", help="RL algorithm")
     parser.add_argument("--enable_cuda", default=True, help="Enable CUDA")
-    parser.add_argument("--device", type=str, default="cpu", help="device")
     parser.add_argument("--seed", default=12345, help="Global seed")
-    parser.add_argument("--use_huber_loss", default=True, help="use huber loss")
-    parser.add_argument("--exp_tag", default="_final", help="exp_tag")
+    parser.add_argument("--exp_tag", default="", help="exp_tag")
     ################################################
     # 1. Parameters for environment
     parser.add_argument("--reward_scale", type=float, default=50.0, help="reward scale factor")
@@ -90,6 +88,7 @@ if __name__ == "__main__":
     parser.add_argument("--value_learning_rate", type=float, default=0.0001)
     parser.add_argument("--policy_learning_rate", type=float, default=0.0001)
     parser.add_argument("--alpha_learning_rate", type=float, default=0.0003)
+    parser.add_argument("--use_huber_loss", default=True, help="Use huber loss")
     # special parameter
     parser.add_argument("--gamma", type=float, default=0.99)
     parser.add_argument("--tau", type=float, default=0.005)

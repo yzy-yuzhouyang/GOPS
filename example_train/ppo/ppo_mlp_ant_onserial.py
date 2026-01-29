@@ -29,10 +29,10 @@ if __name__ == "__main__":
 
     ################################################
     # Key Parameters for users
-    parser.add_argument("--env_id", type=str, default="gymna_humanoidstandup", help="id of environment")
+    parser.add_argument("--env_id", type=str, default="gym_humanoid", help="id of environment")
     parser.add_argument("--algorithm", type=str, default="PPO", help="RL algorithm")
     parser.add_argument("--enable_cuda", default=True, help="Disable CUDA")
-    parser.add_argument("--seed", default=52345, help="Global seed")
+    parser.add_argument("--seed", default=12345, help="Global seed")
 
     ################################################
     # 1. Parameters for environment

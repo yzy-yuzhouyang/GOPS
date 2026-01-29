@@ -1,20 +1,4 @@
-#  Copyright (c). All Rights Reserved.
-#  General Optimal control Problem Solver (GOPS)
-#  Intelligent Driving Lab (iDLab), Tsinghua University
-#
-#  Creator: iDLab
-#  Lab Leader: Prof. Shengbo Eben Li
-#  Email: lisb04@gmail.com
-#
-#  Description: Distributed Soft Actor-Critic (DSAC) algorithm
-#  Reference: Duan J, Guan Y, Li S E, et al.
-#             Distributional soft actor-critic: Off-policy reinforcement learning
-#             for addressing value estimation errors[J].
-#             IEEE transactions on neural networks and learning systems, 2021.
-#  Update: 2021-03-05, Ziqing Gu: create DSAC algorithm
-#  Update: 2021-03-05, Wenxuan Wang: debug DSAC algorithm
-
-__all__=["ApproxContainer","DSACU"]
+__all__=["ApproxContainer","DSACAID"]
 import math
 import time
 from copy import deepcopy
@@ -24,7 +8,7 @@ import torch
 import torch.nn as nn
 from torch.nn.functional import huber_loss
 from torch.distributions import Normal
-from torch.optim import Adam, SGD
+from torch.optim import Adam
 
 from gops.algorithm.base import AlgorithmBase, ApprBase
 from gops.create_pkg.create_apprfunc import create_apprfunc
@@ -84,7 +68,7 @@ class ApproxContainer(ApprBase):
                 self.behavior_policy.parameters(), lr=kwargs["policy_learning_rate"]
             )
         self.alpha_optimizer = Adam([self.log_alpha], lr=kwargs["alpha_learning_rate"])
-        self.beta_optimizer = Adam([self.beta], lr=kwargs["beta_learning_rate"])
+        self.beta_optimizer = Adam([self.beta], lr=kwargs["beta_annealing_rate"])
 
     def create_action_distributions(self, logits):
         return self.policy.get_act_dist(logits)
@@ -93,7 +77,7 @@ class ApproxContainer(ApprBase):
         return self.behavior_policy.get_act_dist(logits)
 
 
-class DSACU(AlgorithmBase):
+class DSACAID(AlgorithmBase):
     """DSAC algorithm with three refinements, higher performance and more stable.
 
     Paper: https://arxiv.org/abs/2310.05858

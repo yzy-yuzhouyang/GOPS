@@ -54,7 +54,7 @@ class EvaluatorDsact:
         action_list = []
         log_prob_list =[]
         reward_list = []
-        qx_tb_eval_dict = {}
+        tb_eval_dict = {}
 
         obs, info = self.env.reset()
         done = 0
@@ -170,28 +170,28 @@ class EvaluatorDsact:
         q_bias = mean_output_qs_aligned - true_qs_aligned
 
         # Populate evaluation metrics dictionary
-        qx_tb_eval_dict["total_avg_return"] = sum(reward_list)  # Total episode return
-        qx_tb_eval_dict['true_q'] = np.mean(true_qs_aligned)  # Average true Q-value
-        qx_tb_eval_dict['mean_output_q'] = np.mean(mean_output_qs[:N])  # Average estimated Q-value
-        qx_tb_eval_dict['std_output_q'] = np.mean(std_output_qs[:N])  # Mean Q-value disagreement
-        qx_tb_eval_dict['std_output_sigma'] = np.mean(std_output_sigmas[:N])  # Mean std disagreement
-        qx_tb_eval_dict['relative_std_output_q'] = np.mean(relative_std_output_qs[:N])  # Relative Q disagreement
-        qx_tb_eval_dict['relative_std_output_sigma'] = np.mean(relative_std_output_sigmas[:N])  # Relative std disagreement
-        qx_tb_eval_dict['mean_q_bias'] = np.mean(q_bias)  # Mean Q-value bias
-        qx_tb_eval_dict['std_q_bias'] = np.std(q_bias)  # Std of Q-value bias
-        qx_tb_eval_dict['episode_length'] = len(reward_list)  # Episode length
-        qx_tb_eval_dict['overestimation_ratio'] = np.mean(q_bias > 0)  # Overestimation ratio
+        tb_eval_dict["total_avg_return"] = sum(reward_list)  # Total episode return
+        tb_eval_dict['true_q'] = np.mean(true_qs_aligned)  # Average true Q-value
+        tb_eval_dict['mean_output_q'] = np.mean(mean_output_qs[:N])  # Average estimated Q-value
+        tb_eval_dict['std_output_q'] = np.mean(std_output_qs[:N])  # Mean Q-value disagreement
+        tb_eval_dict['std_output_sigma'] = np.mean(std_output_sigmas[:N])  # Mean std disagreement
+        tb_eval_dict['relative_std_output_q'] = np.mean(relative_std_output_qs[:N])  # Relative Q disagreement
+        tb_eval_dict['relative_std_output_sigma'] = np.mean(relative_std_output_sigmas[:N])  # Relative std disagreement
+        tb_eval_dict['mean_q_bias'] = np.mean(q_bias)  # Mean Q-value bias
+        tb_eval_dict['std_q_bias'] = np.std(q_bias)  # Std of Q-value bias
+        tb_eval_dict['episode_length'] = len(reward_list)  # Episode length
+        tb_eval_dict['overestimation_ratio'] = np.mean(q_bias > 0)  # Overestimation ratio
 
-        return qx_tb_eval_dict
+        return tb_eval_dict
 
     def run_n_episodes(self, n, iteration):
         eval_list = []
         for _ in range(n):
             eval_list.append(self.run_an_episode(iteration, self.render)) 
-        avg_idsim_tb_eval_dict = {
+        avg_tb_eval_dict = {
             k: np.mean([d[k] for d in eval_list]) for k in eval_list[0].keys()
             }
-        return avg_idsim_tb_eval_dict
+        return avg_tb_eval_dict
 
     def run_evaluation(self, iteration):
         return self.run_n_episodes(self.num_eval_episode, iteration)
