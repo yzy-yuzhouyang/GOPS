@@ -23,6 +23,7 @@ __all__ = [
     "ActionValueDis",
     "ActionValueDistri",
     "RegularizedActionValueDistri",
+    "EvidenceNetwork",
     "StochaPolicyDis",
     "StateValue",
 ]
@@ -49,11 +50,11 @@ def count_vars(module):
     return sum([np.prod(p.shape) for p in module.parameters()])
 
 
-def orthogonal_init_(layer, gain=1.0):
+def orthogonal_init_(layer, gain=1.0, bias=0):
     if isinstance(layer, nn.Linear):
         nn.init.orthogonal_(layer.weight, gain=gain)
         if layer.bias is not None:
-            nn.init.constant_(layer.bias, 0)
+            nn.init.constant_(layer.bias, bias)
 
 
 # Deterministic policy
@@ -461,6 +462,47 @@ class RegularizedActionValueDistri(nn.Module):
         value_std = torch.nn.functional.softplus(value_std_logits) + 1e-5
         
         return torch.cat((value_mean, value_std), dim=-1)
+
+
+class EvidenceNetwork(nn.Module):
+    """
+    Regularized network of evidence for DSAC-AID.
+    Input: observation and action.
+    Output: evidence.
+    """
+    def __init__(self, **kwargs):
+        super().__init__()
+        obs_dim = kwargs["obs_dim"]
+        act_dim = kwargs["act_dim"]
+        hidden_sizes = kwargs["hidden_sizes"]
+        
+        self.layers = nn.ModuleList()
+        input_dim = obs_dim + act_dim
+        
+        for h_dim in hidden_sizes:
+            self.layers.append(nn.Linear(input_dim, h_dim))
+            self.layers.append(nn.GroupNorm(num_groups=16, num_channels=h_dim, affine=False))
+            self.layers.append(nn.ReLU()) # Hard-coded default ReLU activation function
+            input_dim = h_dim
+
+        self.evidence_head = nn.Linear(input_dim, 1)
+        self.apply(self._init_weights)
+
+    def _init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            orthogonal_init_(m, gain=np.sqrt(2))
+        orthogonal_init_(self.evidence_head, gain=1.0, bias=-4.0)
+
+    def forward(self, obs, act):
+        x = torch.cat([obs, act], dim=-1)
+        
+        for layer in self.layers:
+            x = layer(x)
+            
+        evidence_logits = self.evidence_head(x)
+        evidence = torch.nn.functional.softplus(evidence_logits) + 1
+        
+        return evidence
 
 
 class StochaPolicyDis(ActionValueDis, Action_Distribution):
