@@ -67,11 +67,7 @@ pip install gym==0.26.2 mujoco-py==2.1.2.14
 Training scripts are located in the `example_train/dsacaid/` directory.
 
 ### 3.1 Training Modes
-We provide two sampling modes, distinguished by the script filename suffix:
-
-- Parallel Sampling (_vecoffserial.py): Uses vectorized environments to collect data in parallel. (Recommended)
-
-- Serial Sampling (_offserial.py): Uses a single environment instance for serial data collection.
+Uses vectorized environments to collect data in parallel.
 
 ### 3.2 Usage Examples
 Example 1: Serial Training on DMC Humanoid

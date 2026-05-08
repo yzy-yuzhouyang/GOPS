@@ -122,10 +122,9 @@ class DSACAID(AlgorithmBase):
         self.lambda_upper = kwargs["lambda_upper"]
         self.enable_epi_step_scale = kwargs["enable_epi_step_scale"]
         self.use_homogeneous_sigma_step_ratio = kwargs["use_homogeneous_sigma_step_ratio"]
-        self.share_q_step = kwargs['share_q_step']
-        self.share_sigma_step = kwargs['share_sigma_step']
-        self.share_sigma_target = kwargs['share_sigma_target']
         self.use_huber_loss = kwargs['use_huber_loss']
+        self.q_delta = kwargs.get('q_delta_in_huber_loss', 50.0)
+        self.sigma_delta = kwargs.get('sigma_delta_in_sigma_loss', 50.0)
         self.q_bias_lower_threshold = kwargs["q_bias_lower_threshold"]
 
     @property
@@ -147,30 +146,9 @@ class DSACAID(AlgorithmBase):
         ) -> dict:
         if overestimation > 0:
             update_beta = False
-        tb_info = self._compute_gradient(data, iteration, update_beta, overestimation)
+        tb_info = self._compute_gradient(data, update_beta, overestimation)
         self._update(iteration, update_beta)
         return tb_info
-
-    def get_remote_update_info(
-        self, data: DataDict, iteration: int
-    ) -> Tuple[dict, dict]:
-        tb_info = self._compute_gradient(data, iteration)
-
-        update_info = {
-            "q_grads": [],
-            "policy_grad": [p._grad for p in self.networks.policy.parameters()],
-            "iteration": iteration,
-        }
-        
-        for i in range(self.networks.num_q):
-            q_name = f"q{i+1}"
-            q_network = getattr(self.networks, q_name)
-            update_info["q_grads"].append([p._grad for p in q_network.parameters()])
-            
-        if self.auto_alpha:
-            update_info.update({"log_alpha_grad":self.networks.log_alpha.grad})
-
-        return tb_info, update_info
 
     def remote_update(self, update_info: dict):
         iteration = update_info["iteration"]
@@ -211,7 +189,6 @@ class DSACAID(AlgorithmBase):
     def _compute_gradient(
             self, 
             data: DataDict, 
-            iteration: int, 
             update_beta, 
             overestimation, 
         ):
@@ -238,7 +215,7 @@ class DSACAID(AlgorithmBase):
             q_optimizer = getattr(self.networks, q_optimizer_name)
             q_optimizer.zero_grad()
             
-        loss_q, ensemble_qs_tensor, ensemble_sigmas_tensor = self._compute_loss_q(data)
+        loss_q, qs_tensor, sigmas_tensor = self._compute_loss_q(data)
         loss_q.backward()
 
         for i in range(self.networks.num_q):
@@ -285,14 +262,13 @@ class DSACAID(AlgorithmBase):
             "DSAC2/beta-RL iter": self._get_beta(),
             "DSAC2/mean_sigmas": sum(self.mean_sigmas) / self.networks.num_q if all(std is not None for std in self.mean_sigmas) else 0,
             tb_tags["alg_time"]: (time.time() - start_time) * 1000,
+            "DSAC2/critic_mean_q-RL iter": qs_tensor.mean().item(),
+            "DSAC2/critic_ensemble_std_q-RL iter": qs_tensor.std(0).mean().item(),
+            "DSAC2/critic_batch_std_q-RL iter": qs_tensor.mean(0).std().item(),
+            "DSAC2/critic_mean_sigma-RL iter": sigmas_tensor.mean().item(),
+            "DSAC2/critic_ensemble_std_sigma-RL iter": sigmas_tensor.std(0).mean().item(),
+            "DSAC2/critic_batch_std_sigma-RL iter": sigmas_tensor.mean(0).std().item(),
         }
-
-        tb_info.update({
-            "DSAC2/critic_mean_q-RL iter": ensemble_qs_tensor.mean().item(),
-            "DSAC2/critic_std_q-RL iter": ensemble_qs_tensor.std().item(),
-            "DSAC2/critic_mean_sigma-RL iter": ensemble_sigmas_tensor.mean().item(),
-            "DSAC2/critic_std_sigma-RL iter": ensemble_sigmas_tensor.std().item(),
-        })
 
         return tb_info
 
@@ -317,17 +293,12 @@ class DSACAID(AlgorithmBase):
         act2_dist = self.networks.create_action_distributions(logits_2)
         act2, log_prob_act2 = act2_dist.rsample()
 
-        qs = []
-        sigmas = []
-        zs = []
-        
+        qs = []; sigmas = []; zs = []
         for i in range(self.networks.num_q):
             q_name = f"q{i+1}"
             q_network = getattr(self.networks, q_name)
             q, sigma, z = self._q_evaluate(obs, act, q_network)
-            qs.append(q)
-            sigmas.append(sigma)
-            zs.append(z)
+            qs.append(q); sigmas.append(sigma); zs.append(z)
             
             if self.mean_sigmas[i] is None:
                 self.mean_sigmas[i] = torch.mean(sigma.detach())
@@ -345,10 +316,7 @@ class DSACAID(AlgorithmBase):
                 self.tau_b * torch.mean(u_epistemic)
 
         with torch.no_grad():
-            qs_next = []
-            sigmas_next = []
-            zs_next = []
-            
+            qs_next = []; sigmas_next = []; zs_next = [] 
             for i in range(self.networks.num_q):
                 q_target_name = f"q{i+1}_target"
                 q_target_network = getattr(self.networks, q_target_name)
@@ -373,24 +341,8 @@ class DSACAID(AlgorithmBase):
             else:
                 self.mean_uncertainty = (1 - self.tau_b) * self.mean_uncertainty + \
                     self.lambda_lower * self.tau_b * torch.mean(uncertainty.detach())
-                
-            if self.share_sigma_target:
-                distances = torch.abs(q_next_tensor - target_q_next.unsqueeze(0))
-                closest_indices = torch.argmin(distances, dim=0)  # [B]
-                zs_next_tensor = torch.stack(zs_next)  # [num_q, B]
-                shared_zs_next = zs_next_tensor.gather(
-                    dim=0, 
-                    index=closest_indices.unsqueeze(0)
-                ).squeeze(0)
         
-        total_loss = 0
-        bias = 0.1
-        if self.share_q_step or self.share_sigma_step:
-            mean_sigmas_tensor = torch.stack(self.mean_sigmas).detach()
-            shared_ratio = (
-                (torch.pow(torch.mean(mean_sigmas_tensor, dim=0), 2) + bias) / \
-                (torch.pow(torch.mean(sigmas_tensor, dim=0), 2) + bias)
-            )
+        total_loss = 0; bias = 0.1
         for i in range(self.networks.num_q):
             target_q, target_z_bound = self._compute_target_q(
                 rew,
@@ -398,33 +350,31 @@ class DSACAID(AlgorithmBase):
                 qs[i].detach(),
                 self.mean_sigmas[i].detach(),
                 target_q_next.detach(),
-                shared_zs_next if self.share_sigma_target else zs_next[i].detach(),
+                zs_next[i].detach(),
                 log_prob_act2.detach(),
             )
             
             sigma_detach = torch.clamp(sigmas[i], min=0.).detach()
             if self.enable_epi_step_scale:
-                default_q_ratio = (
+                q_ratio = (
                     (torch.pow(self.mean_sigmas[i], 2) + self.mean_u_epistemic + bias) / \
                     (torch.pow(sigma_detach, 2) + u_epistemic + bias)
                 )
             else:
-                default_q_ratio = (
+                q_ratio = (
                     (torch.pow(self.mean_sigmas[i], 2) + bias) / \
                     (torch.pow(sigma_detach, 2) + bias)
                 )
             if self.use_homogeneous_sigma_step_ratio:
-                default_sigma_ratio = (
+                sigma_ratio = (
                     (torch.pow(self.mean_sigmas[i], 2) + bias) / \
                     (torch.pow(sigma_detach, 2) + bias)
                 )
             else:
-                default_sigma_ratio = (
+                sigma_ratio = (
                     (torch.pow(self.mean_sigmas[i], 2) + bias) / \
                     (torch.pow(sigma_detach, 3) + bias)
                 )
-            q_ratio = shared_ratio if self.share_q_step else default_q_ratio
-            sigma_ratio = shared_ratio if self.share_sigma_step else default_sigma_ratio
 
             if self.use_huber_loss:
                 assert self.use_homogeneous_sigma_step_ratio is True, (
@@ -432,27 +382,24 @@ class DSACAID(AlgorithmBase):
                 )
                 q_ratio = q_ratio.clamp(min=0.1, max=10)
                 sigma_ratio = sigma_ratio.clamp(min=0.01, max=100)
+                
                 residual_value = torch.pow(qs[i].detach()-target_z_bound, 2)
                 q_loss = torch.mean(
-                    q_ratio * huber_loss(qs[i], target_q, delta = 50, reduction='none') + \
-                    sigma_ratio * huber_loss(sigmas[i].pow(2), residual_value, delta = 50, reduction='none') 
+                    q_ratio * huber_loss(qs[i], target_q, delta = self.q_delta, reduction='none') + \
+                    sigma_ratio * huber_loss(sigmas[i].pow(2), residual_value, delta = self.sigma_delta, reduction='none') 
                         / (2 * sigma_detach.pow(2) + bias)
                 )
             else:
                 if self.use_homogeneous_sigma_step_ratio:
                     q_loss = - torch.mean(
-                        q_ratio * qs[i] * (
-                            (target_q - qs[i]).detach()
-                        ) + \
+                        q_ratio * qs[i] * (target_q - qs[i]).detach() + \
                         sigma_ratio * sigmas[i] * (
                             torch.pow(qs[i].detach() - target_z_bound, 2) - sigma_detach.pow(2)
                         ) / (sigma_detach + bias)
                     )
                 else:
                     q_loss = - torch.mean(
-                        q_ratio * qs[i] * (
-                            (target_q - qs[i]).detach()
-                        ) + \
+                        q_ratio * qs[i] * (target_q - qs[i]).detach() + \
                         sigma_ratio * sigmas[i] * (
                             torch.pow(qs[i].detach() - target_z_bound, 2) - sigma_detach.pow(2)
                         )
@@ -460,7 +407,7 @@ class DSACAID(AlgorithmBase):
 
             total_loss += q_loss
 
-        return total_loss, q_tensor.mean(dim=1), sigmas_tensor.mean(dim=1)
+        return total_loss, q_tensor, sigmas_tensor
 
     def _compute_target_q(self, r, done, q, sigma, q_next, z_next, log_prob_a_next):
         target_q = r + (1 - done) * self.gamma * (
@@ -477,14 +424,12 @@ class DSACAID(AlgorithmBase):
     def _compute_loss_behavior_policy(self, data: DataDict):
         obs, new_act, new_log_prob = data["obs"], data["new_behavior_act"], data["new_behavior_log_prob"]
         
-        qs = []
-        sigmas = []
+        qs = []; sigmas = []
         for i in range(self.networks.num_q):
             q_name = f"q{i+1}"
             q_network = getattr(self.networks, q_name)
             q, sigma, _ = self._q_evaluate(obs, new_act, q_network)
-            qs.append(q)
-            sigmas.append(sigma)
+            qs.append(q); sigmas.append(sigma)
         
         q_all = torch.stack(qs)
         u_epistemic = torch.var(q_all, dim=0)
@@ -495,7 +440,6 @@ class DSACAID(AlgorithmBase):
         target_q = torch.mean(q_all, dim=0) + self.lambda_upper * torch.sqrt(
                 torch.clip(u_epistemic + factor_aleatoric * u_aleatoric, min=1e-8)
             )
-
         loss_policy = (self._get_alpha() * new_log_prob - target_q).mean()
         return loss_policy
     
@@ -512,7 +456,6 @@ class DSACAID(AlgorithmBase):
         u_epistemic = torch.var(torch.stack(qs), dim=0)
         target_q = torch.mean(torch.stack(qs), dim=0) - \
             self.lambda_lower * torch.sqrt(torch.clamp(u_epistemic, min=1e-8))
-
         loss_policy = (self._get_alpha() * new_log_prob - target_q).mean()
         entropy = -new_log_prob.detach().mean()
         return loss_policy, entropy

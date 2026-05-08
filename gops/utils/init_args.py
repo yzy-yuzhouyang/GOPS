@@ -114,11 +114,18 @@ def init_args(env, **args):
                 f'-{args["lambda_lower"]}' + \
                 f'-{args["lambda_upper"]}' + \
                 f'-{args["beta_annealing_rate"]}_lr'
-            config_string += '' if args["mix_mode"] == "default" else f'-{args["mix_mode"]}'
-            config_string += '-auto_lambda' if args["auto_lambda"] else ''
-            config_string += '-share_q_step' if args["share_q_step"] else ''
-            config_string += '-share_sigma_step' if args["share_sigma_step"] else ''
-            config_string += '-share_sigma_target' if args["share_sigma_target"] else ''
+            config_string += '-entropy_scale' if args["entropy_scale_ratio"] != 1.0 else ''
+            config_string += args["exp_tag"]
+            args["save_folder"] = os.path.join(
+                dir_path + "/results/",args["env_id"],
+                args["algorithm"] + f'-{args["seed"]}' + config_string + '_'+
+                datetime.datetime.now().strftime("%y%m%d-%H%M%S"),
+            )
+        elif args["algorithm"] in ["DSACAIDV2"]:
+            config_string = f'-{args["num_q"]}' + \
+                f'-{args["clip_thd"]}' + \
+                f'-{args["lambda_lower"]}' + \
+                f'-{args["lambda_upper"]}'
             config_string += '-entropy_scale' if args["entropy_scale_ratio"] != 1.0 else ''
             config_string += args["exp_tag"]
             args["save_folder"] = os.path.join(
@@ -150,6 +157,6 @@ def init_args(env, **args):
 
     # Start a new local Ray instance
     # This is necessary since all training scripts use evaluator, which uses ray.
-    ray.init(address="local")
+    ray.init(address="local", _temp_dir=os.path.expanduser("~/ray_tmp"))
 
     return args

@@ -45,7 +45,6 @@ class OffSerialDsacaidTrainer:
         self.early_stage_flag = kwargs["freeze_early_beta"]
         self.q_bias_lower_threshold = kwargs["q_bias_lower_threshold"]
         self.use_optimistic_behavior_policy = kwargs["lambda_upper"]
-        self.mix_mode = kwargs["mix_mode"]
 
         self.writer = SummaryWriter(log_dir=self.save_folder, flush_secs=20)
         # flush tensorboard at the beginning
@@ -74,30 +73,7 @@ class OffSerialDsacaidTrainer:
         # sampling
         if self.iteration % self.sample_interval == 0:
             if self.use_optimistic_behavior_policy:
-                if self.mix_mode == "continue":
-                    mix_ratio = 1 - self.networks.beta.item() / self.networks.beta_init
-                    if mix_ratio > 1e-4 and mix_ratio < 1 - 1e-4:
-                        if torch.rand(1).item() < mix_ratio:
-                            self.sampler.use_target_policy = True
-                        else:
-                            self.sampler.use_target_policy = False
-                    elif mix_ratio <= 1e-4:
-                        self.sampler.use_target_policy = False
-                    else:
-                        self.sampler.use_target_policy = True
-                elif self.mix_mode == "step":
-                    if self.networks.beta.item() < 1e-6:
-                        self.sampler.use_target_policy = True
-                    else:
-                        self.sampler.use_target_policy = False
-                # default: no mixing, directly use behavior policy.
-                elif self.mix_mode == "default":
-                    self.sampler.use_target_policy = False
-
-                else:
-                    raise ValueError(
-                        f"unsupported mix_mode: {self.mix_mode}, only 'default', 'continue' and 'step' are supported."
-                    )
+                self.sampler.use_target_policy = False
             else:
                 self.sampler.use_target_policy = True
             if self.device != "cpu":

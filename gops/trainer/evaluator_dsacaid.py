@@ -32,7 +32,6 @@ class EvaluatorDsacaid:
         # DSAC-AID.
         self.num_q = self.networks.num_q
         self.lambda_lower = kwargs["lambda_lower"]
-        self.auto_lambda = kwargs["auto_lambda"]
 
         self.print_time = 0
         self.print_iteration = -1
@@ -122,12 +121,8 @@ class EvaluatorDsacaid:
 
             # Compute final Q-value with uncertainty penalty.
             u_epistemic = torch.var(output_qs, dim=0)
-            if not self.auto_lambda:
-                mean_output_qs = torch.mean(output_qs, dim=0) - \
-                    self.lambda_lower * torch.sqrt(u_epistemic)
-            else:
-                mean_output_qs = torch.mean(output_qs, dim=0) - \
-                    torch.mean(self.lambda_lower) * torch.sqrt(u_epistemic)
+            mean_output_qs = torch.mean(output_qs, dim=0) - \
+                self.lambda_lower * torch.sqrt(u_epistemic)
             
             # Compute statistics.
             mean_output_sigmas = torch.mean(output_sigmas, dim=0)

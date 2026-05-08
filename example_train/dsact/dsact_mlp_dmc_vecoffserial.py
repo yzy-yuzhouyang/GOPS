@@ -17,10 +17,11 @@ if __name__ == "__main__":
 
     ################################################
     # Key Parameters for users
-    parser.add_argument("--env_id", type=str, default="dmc_humanoidrun", help="id of environment")
+    parser.add_argument("--env_id", type=str, default="dmc_dogrun", help="id of environment")
     parser.add_argument("--algorithm", type=str, default="DSACT", help="RL algorithm")
     parser.add_argument("--enable_cuda", default=True, help="Enable CUDA")
     parser.add_argument("--seed", default=12345, help="Global seed")
+    parser.add_argument("--exp_tag", default="", help="Experiment tag for logging and identification")
     ################################################
     # 1. Parameters for environment
     parser.add_argument("--vector_env_num", type=int, default=4, help="Number of vector envs")
