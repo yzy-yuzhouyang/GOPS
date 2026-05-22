@@ -1,9 +1,17 @@
-# Taming the Aleatoric Impulse in Off-Policy Reinforcement Learning
+# [ICML2026] Taming the Aleatoric Impulse in Off-Policy Reinforcement Learning
 
 This repository contains the official implementation of **DSAC-AID**. 
 The code is built upon the **GOPS** framework (General Optimal control Problem Solver).
-To respect the original license, we have retained the original file headers containing author names (e.g., "GOPS Team"). 
-**Please note that these identities belong to the original framework developers, NOT the authors of this double-blind submission.**
+
+If you find our work useful, please cite our paper:
+```
+@inproceedings{aid2026icml,
+  title={Taming the Aleatoric Impulse in Off-Policy Reinforcement Learning},
+  author={Yu, Zhouyang and Zhan, Guojian and Guan, Yang and Duan, Jingliang and Tao, Letian and Li, Shengbo Eben},
+  booktitle={International conference on machine learning},
+  year={2026}
+}
+```
 
 ## 1. Installation
 
@@ -73,10 +81,10 @@ Uses vectorized environments to collect data in parallel.
 Example 1: Serial Training on DMC Humanoid
 ```bash
 conda activate gops_dmc
-python example_train/dsacaid/dsacaid_mlp_dmc_vecoffserial.py
+python example_train/dsacaid/dmc/dsacaid_mlp_dmc_dog_vecoffserial.py
 ```
 Example 2: Parallel Training on Gym-MuJoCo
 ```bash
 conda activate gops_mujoco
-python example_train/dsacaid/dsacaid_mlp_mujoco_vecoffserial.py
+python example_train/dsacaid/gym-mujoco/dsacaid_mlp_gym_humanoid_vecoffserial.py
 ```

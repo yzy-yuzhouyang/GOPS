@@ -18,7 +18,7 @@ if __name__ == "__main__":
     # =========================================================================
     # Key Parameters for users
     # =========================================================================
-    parser.add_argument("--env_id", type=str, default="dmc_dogrun", help="Id of environment")
+    parser.add_argument("--env_id", type=str, default="dmc_humanoidwalk", help="Id of environment")
     parser.add_argument("--algorithm", type=str, default="DSACAID", help="RL algorithm")
     parser.add_argument("--enable_cuda", type=bool, default=True, help="Enable CUDA")
     parser.add_argument("--seed", type=int, default=12345, help="Global seed")
@@ -29,15 +29,15 @@ if __name__ == "__main__":
     # 1. Pessimistic Evaluation (Critic)
     parser.add_argument("--num_q", type=int, default=4, help="Ensemble size")
     # 1.1 Pessimistic target
-    parser.add_argument("--lambda_lower", type=float, default=0.71, help="Lower confidence bound coefficient")
+    parser.add_argument("--lambda_lower", type=float, default=0.1, help="Lower confidence bound coefficient")
     parser.add_argument("--beta", type=float, default=0.1, help="Initial aleatoric pessimism coefficient")
-    parser.add_argument("--beta_annealing_rate", type=float, default=5e-3, help="Annealing rate for beta")
+    parser.add_argument("--beta_annealing_rate", type=float, default=2e-3, help="Annealing rate for beta")
     parser.add_argument("--freeze_early_beta", type=bool, default=True, help="Whether to freeze beta decay during the initial warmup phase")
     parser.add_argument("--q_bias_lower_threshold", type=float, default=-1000, help="Bias threshold to trigger or resume beta updates")
     # 1.2 Gradient modulation
     parser.add_argument("--use_homogeneous_sigma_step_ratio", default=True, help="Use homogeneous modulation ratio for sigma")
     # 2. Optimistic exploration (Actor)
-    parser.add_argument("--lambda_upper", type=float, default=0.71, help="Upper confidence bound coefficient")
+    parser.add_argument("--lambda_upper", type=float, default=0.1, help="Upper confidence bound coefficient")
     # 3. Legacy (Not used in formal experiments)
     parser.add_argument("--enable_epi_step_scale", type=bool, default=True, help="(Unused) Involve epistemic uncertainty in gradient modulation") 
     parser.add_argument("--entropy_scale_ratio", type=float, default=1.0, help="(Unused) Scaling factor for target entropy")

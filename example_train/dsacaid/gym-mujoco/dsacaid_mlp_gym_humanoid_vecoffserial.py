@@ -18,26 +18,26 @@ if __name__ == "__main__":
     # =========================================================================
     # Key Parameters for users
     # =========================================================================
-    parser.add_argument("--env_id", type=str, default="gym_ant", help="Id of environment")
+    parser.add_argument("--env_id", type=str, default="gym_humanoid", help="Id of environment")
     parser.add_argument("--algorithm", type=str, default="DSACAID", help="RL algorithm")
     parser.add_argument("--enable_cuda", type=bool, default=True, help="Enable CUDA")
     parser.add_argument("--seed", type=int, default=12345, help="Global seed")
-    parser.add_argument("--exp_tag", type=str, default="_huber_v1_reward_50_sigma", help="Experiment tag for logging and identification")
+    parser.add_argument("--exp_tag", type=str, default="", help="Experiment tag for logging and identification")
     # =========================================================================
     # AID Mechanism Hyperparameters
     # =========================================================================
     # 1. Pessimistic Evaluation (Critic)
     parser.add_argument("--num_q", type=int, default=4, help="Ensemble size")
     # 1.1 Pessimistic target
-    parser.add_argument("--lambda_lower", type=float, default=0.71, help="Lower confidence bound coefficient")
-    parser.add_argument("--beta", type=float, default=0.1, help="Initial aleatoric pessimism coefficient")
-    parser.add_argument("--beta_annealing_rate", type=float, default=5e-3, help="Annealing rate for beta")
+    parser.add_argument("--lambda_lower", type=float, default=1.0, help="Lower confidence bound coefficient")
+    parser.add_argument("--beta", type=float, default=0.2, help="Initial aleatoric pessimism coefficient")
+    parser.add_argument("--beta_annealing_rate", type=float, default=5e-4, help="Annealing rate for beta")
     parser.add_argument("--freeze_early_beta", type=bool, default=True, help="Whether to freeze beta decay during the initial warmup phase")
     parser.add_argument("--q_bias_lower_threshold", type=float, default=-1000, help="Bias threshold to trigger or resume beta updates")
     # 1.2 Gradient modulation
     parser.add_argument("--use_homogeneous_sigma_step_ratio", type=bool, default=True, help="Use homogeneous modulation ratio for sigma")
     # 2. Optimistic exploration (Actor)
-    parser.add_argument("--lambda_upper", type=float, default=0.71, help="Upper confidence bound coefficient")
+    parser.add_argument("--lambda_upper", type=float, default=1.0, help="Upper confidence bound coefficient")
     # 3. Legacy (Not used in formal experiments)
     parser.add_argument("--enable_epi_step_scale", type=bool, default=True, help="(Unused) Involve epistemic uncertainty in gradient modulation")
     parser.add_argument("--entropy_scale_ratio", type=float, default=1.0, help="(Unused) Scaling factor for target entropy")
@@ -47,7 +47,7 @@ if __name__ == "__main__":
     parser.add_argument("--vector_env_num", type=int, default=4, help="Number of vector envs")
     parser.add_argument("--vector_env_type", type=str, default='async', help="Options: sync/async")
     parser.add_argument("--gym2gymnasium", type=bool, default=True, help="Convert Gym-style env to Gymsnaium-style")
-    parser.add_argument("--reward_scale", type=float, default=50, help="reward scale factor")
+    parser.add_argument("--reward_scale", type=float, default=0.1, help="reward scale factor")
     parser.add_argument("--is_render", type=bool, default=False, help="Draw environment animation")
     parser.add_argument("--is_adversary", type=bool, default=False, help="Adversary training")
 
@@ -56,7 +56,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--value_func_name",
         type=str,
-        default="RegularizedActionValueDistri",
+        default="ActionValueDistri",
         help="RegularizedActionValueDistri/ActionValueDistri",
     )
     parser.add_argument("--value_func_type", type=str, default="MLP", help="Options: MLP/CNN/CNN_SHARED/RNN/POLY/GAUSS")
@@ -71,7 +71,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--policy_func_name",
         type=str,
-        default="RegularizedStochaPolicy",
+        default="StochaPolicy",
         help="Options: RegularizedStochaPolicy/StochaPolicy",
     )
     parser.add_argument(
@@ -96,10 +96,10 @@ if __name__ == "__main__":
 
     ################################################
     # 3. Parameters for RL algorithm
-    parser.add_argument("--value_learning_rate", type=float, default=0.0003)
-    parser.add_argument("--policy_learning_rate", type=float, default=0.0003)
+    parser.add_argument("--value_learning_rate", type=float, default=0.0001)
+    parser.add_argument("--policy_learning_rate", type=float, default=0.0001)
     parser.add_argument("--alpha_learning_rate", type=float, default=0.0003)
-    parser.add_argument("--use_huber_loss", type=bool, default=True, help="Use huber loss")
+    parser.add_argument("--use_huber_loss", type=bool, default=False, help="Use huber loss")
     parser.add_argument("--q_delta_in_huber_loss", type=float, default=50.0, help="Delta parameter for q loss")
     parser.add_argument("--sigma_delta_in_sigma_loss", type=float, default=50.0, help="Delta parameter for sigma loss")
     # special parameter

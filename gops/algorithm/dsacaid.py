@@ -383,11 +383,10 @@ class DSACAID(AlgorithmBase):
                 q_ratio = q_ratio.clamp(min=0.1, max=10)
                 sigma_ratio = sigma_ratio.clamp(min=0.01, max=100)
                 
-                residual_value = torch.pow(qs[i].detach()-target_z_bound, 2)
                 q_loss = torch.mean(
                     q_ratio * huber_loss(qs[i], target_q, delta = self.q_delta, reduction='none') + \
-                    sigma_ratio * huber_loss(sigmas[i].pow(2), residual_value, delta = self.sigma_delta, reduction='none') 
-                        / (2 * sigma_detach.pow(2) + bias)
+                    sigma_ratio * sigmas[i] * (sigma_detach.pow(2) - 2 * huber_loss(qs[i].detach(), target_z_bound, delta = self.sigma_delta, reduction='none'))
+                        / (sigma_detach + bias)
                 )
             else:
                 if self.use_homogeneous_sigma_step_ratio:
