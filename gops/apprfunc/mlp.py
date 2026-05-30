@@ -22,7 +22,9 @@ __all__ = [
     "ActionValue",
     "ActionValueDis",
     "ActionValueDistri",
+    "ActionValueDoubleDistri",
     "RegularizedActionValueDistri",
+    "RegularizedActionValueDoubleDistri",
     "StochaPolicyDis",
     "StateValue",
 ]
@@ -419,6 +421,35 @@ class ActionValueDistri(nn.Module):
         return torch.cat((value_mean, value_std), dim=-1)
 
 
+class ActionValueDoubleDistri(nn.Module):
+    """
+    Approximated function of distributed action-value function.
+    Input: observation and action.
+    Output: parameters of action-value distribution.
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__()
+        obs_dim = kwargs["obs_dim"]
+        act_dim = kwargs["act_dim"]
+        hidden_sizes = kwargs["hidden_sizes"]
+        self.q = mlp(
+            [obs_dim + act_dim] + list(hidden_sizes) + [3],
+            get_activation_func(kwargs["hidden_activation"]),
+            get_activation_func(kwargs["output_activation"]),
+        )
+        if "min_log_std"  in kwargs or "max_log_std" in kwargs:
+            warnings.warn("min_log_std and max_log_std are deprecated in ActionValueDistri.")
+
+    def forward(self, obs, act):
+        logits = self.q(torch.cat([obs, act], dim=-1))
+        q, z_std, q_std = torch.chunk(logits, chunks=3, dim=-1)
+        z_std = torch.nn.functional.softplus(z_std) 
+        q_std = torch.nn.functional.softplus(q_std) 
+        
+        return torch.cat((q, z_std, q_std), dim=-1)
+
+
 class RegularizedActionValueDistri(nn.Module):
     """
     Regularized network of distributed action-value function for DSAC-AID.
@@ -461,6 +492,54 @@ class RegularizedActionValueDistri(nn.Module):
         value_std = torch.nn.functional.softplus(value_std_logits) + 1e-5
         
         return torch.cat((value_mean, value_std), dim=-1)
+    
+
+class RegularizedActionValueDoubleDistri(nn.Module):
+    """
+    Regularized network of distributed action-value function for DSAC-AID.
+    Input: observation and action.
+    Output: parameters of action-value distribution.
+    """
+    def __init__(self, **kwargs):
+        super().__init__()
+        obs_dim = kwargs["obs_dim"]
+        act_dim = kwargs["act_dim"]
+        hidden_sizes = kwargs["hidden_sizes"]
+        
+        self.layers = nn.ModuleList()
+        input_dim = obs_dim + act_dim
+        
+        for h_dim in hidden_sizes:
+            self.layers.append(nn.Linear(input_dim, h_dim))
+            self.layers.append(nn.GroupNorm(num_groups=16, num_channels=h_dim, affine=False))
+            self.layers.append(nn.ReLU()) # Hard-coded default ReLU activation function
+            input_dim = h_dim
+
+        self.mean_head = nn.Linear(input_dim, 1)
+        self.std_z_head = nn.Linear(input_dim, 1)
+        self.std_q_head = nn.Linear(input_dim, 1)
+        self.apply(self._init_weights)
+
+    def _init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            orthogonal_init_(m, gain=np.sqrt(2))
+        orthogonal_init_(self.mean_head, gain=1.0)
+        orthogonal_init_(self.std_z_head, gain=1.0)
+        orthogonal_init_(self.std_q_head, gain=1.0)
+
+    def forward(self, obs, act):
+        x = torch.cat([obs, act], dim=-1)
+        
+        for layer in self.layers:
+            x = layer(x)
+            
+        value_mean = self.mean_head(x)
+        value_std_z_logits = self.std_z_head(x)
+        value_std_z = torch.nn.functional.softplus(value_std_z_logits) + 1e-5
+        value_std_q_logits = self.std_q_head(x)
+        value_std_q = torch.nn.functional.softplus(value_std_q_logits) + 1e-5
+        
+        return torch.cat((value_mean, value_std_z, value_std_q), dim=-1)
 
 
 class StochaPolicyDis(ActionValueDis, Action_Distribution):

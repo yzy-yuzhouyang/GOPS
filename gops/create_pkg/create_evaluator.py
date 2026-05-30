@@ -42,10 +42,12 @@ def register(
 # regist evaluator
 from gops.trainer.evaluator import Evaluator
 from gops.trainer.evaluator_dsacaid import EvaluatorDsacaid
+from gops.trainer.evaluator_dsacaidv2 import EvaluatorDsacaidv2
 from gops.trainer.evaluator_dsact import EvaluatorDsact
 from gops.trainer.evaluator_sac import EvaluatorSac
 register(evaluator_name="evaluator", entry_point=Evaluator)
 register(evaluator_name="evaluator_dsacaid", entry_point=EvaluatorDsacaid)
+register(evaluator_name="evaluator_dsacaidv2", entry_point=EvaluatorDsacaidv2)
 register(evaluator_name="evaluator_dsact", entry_point=EvaluatorDsact)
 register(evaluator_name="evaluator_sac", entry_point=EvaluatorSac)
 
@@ -66,6 +68,10 @@ def create_evaluator(evaluator_name: str, **kwargs) -> object:
     # return ray.remote(num_cpus=1)(evaluator_creator).remote(**_kwargs)
     device = _kwargs.get("device", "cpu")
     if device == "cpu":
-        return ray.remote(num_cpus=1)(evaluator_creator).remote(**_kwargs)
+        return ray.remote(num_cpus=1)(evaluator_creator).options(
+        max_restarts=-1,
+        max_task_retries=-1,
+        memory=20 * 1024 * 1024 * 1024 
+    ).remote(**_kwargs)
     else:
         return ray.remote(num_gpus=1)(evaluator_creator).remote(**_kwargs)
