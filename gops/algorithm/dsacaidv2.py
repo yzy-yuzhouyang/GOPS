@@ -104,6 +104,7 @@ class DSACAIDV2(AlgorithmBase):
         index: int = 0,
         gamma: float = 0.99,
         tau: float = 0.005,
+        rho: Optional[float] = None,
         auto_alpha: bool = True,
         target_entropy: Optional[float] = None,
         delay_update: int = 2,
@@ -115,6 +116,7 @@ class DSACAIDV2(AlgorithmBase):
         self.networks.log_alpha.data.fill_(math.log(alpha_init))
         self.gamma = gamma
         self.tau = tau
+        self.rho = tau if rho is None else rho
         self.auto_alpha = auto_alpha
         if target_entropy is None:
             target_entropy = -kwargs["entropy_scale_ratio"] * kwargs["action_dim"]
@@ -142,12 +144,16 @@ class DSACAIDV2(AlgorithmBase):
         self.asymmetry_thd = kwargs["asymmetry_thd"]
         self.asymmetry_ratio = kwargs["asymmetry_ratio"]
         self.use_higher_order_epi = kwargs.get("use_higher_order_epi", False)
+        self.evidence_guard_coef = kwargs.get("evidence_guard_coef", 0.2)
+        self.evidence_guard_n0 = kwargs.get("value_n_init", None)
+        self.cancel_target_drift = kwargs.get("cancel_target_drift", False)
 
     @property
     def adjustable_parameters(self):
         return (
             "gamma",
             "tau",
+            "rho",
             "auto_alpha",
             "alpha",
             "delay_update",
@@ -326,15 +332,19 @@ class DSACAIDV2(AlgorithmBase):
 
         return tb_info
 
-    def _q_evaluate(self, obs, act, qnet):
+    def _q_evaluate(self, obs, act, qnet, return_evidence_count: bool = False):
         StochaQ = qnet(obs, act)
         qs, sigmas_z, sigmas_q = StochaQ[..., 0], StochaQ[..., 1], StochaQ[..., 2]
+        evidence_count = None
         if self.use_n_form_sigma_q:
-            sigmas_q = sigmas_z.detach() / torch.sqrt(sigmas_q+1)
+            evidence_count = sigmas_q
+            sigmas_q = sigmas_z.detach() / torch.sqrt(evidence_count + 1)
         normal = Normal(torch.zeros_like(qs), torch.ones_like(sigmas_z))
         noise = normal.sample()
         noise = torch.clamp(noise, -3, 3)
         zs = qs + torch.mul(noise, sigmas_z)
+        if return_evidence_count:
+            return qs, zs, sigmas_q, sigmas_z, evidence_count
         return qs, zs, sigmas_q, sigmas_z
 
     def _compute_loss_q(self, data: DataDict):
@@ -349,12 +359,15 @@ class DSACAIDV2(AlgorithmBase):
         act2_dist = self.networks.create_action_distributions(logits_2)
         act2, log_prob_act2 = act2_dist.rsample()
 
-        qs = []; zs = []; sigmas_q = []; sigmas_z = []
+        qs = []; zs = []; sigmas_q = []; sigmas_z = []; evidence_counts = []
         for i in range(self.networks.num_q):
             q_name = f"q{i+1}"
             q_network = getattr(self.networks, q_name)
-            q, z, sigma_q, sigma_z = self._q_evaluate(obs, act, q_network)
+            q, z, sigma_q, sigma_z, evidence_count = self._q_evaluate(
+                obs, act, q_network, return_evidence_count=True
+            )
             qs.append(q); zs.append(z); sigmas_q.append(sigma_q); sigmas_z.append(sigma_z)
+            evidence_counts.append(evidence_count)
             
             if self.mean_sigmas_z[i] is None:
                 self.mean_sigmas_z[i] = torch.mean(sigma_z.detach())
@@ -485,8 +498,30 @@ class DSACAIDV2(AlgorithmBase):
 
             if self.use_higher_order_target:
                 sigma_q_difference = higher_order_target_qs[i].detach() - target_qs[i].detach()
+                if self.cancel_target_drift:
+                    sigma_q_difference = sigma_q_difference - sigma_q_difference.mean(
+                        dim=0, keepdim=True
+                    )
             else:
                 sigma_q_difference = target_qs[i].detach() - qs[i].detach()
+            evidence_guard = 1.0
+            if (
+                self.use_n_form_sigma_q
+                and self.evidence_guard_n0 is not None
+                and self.evidence_guard_coef < 1.0
+            ):
+                evidence_count_detach = evidence_counts[i].detach()
+                evidence_push_down = (
+                    torch.pow(sigma_q_difference, 2).detach()
+                    * evidence_count_detach
+                    / (torch.pow(sigma_z_detach, 2) + 1e-8)
+                )
+                evidence_guard = torch.where(
+                    (evidence_count_detach < self.evidence_guard_n0)
+                    & (evidence_push_down > 1.0),
+                    torch.full_like(evidence_count_detach, self.evidence_guard_coef),
+                    torch.ones_like(evidence_count_detach),
+                ).detach()
             if self.use_huber_loss:
                 assert self.use_homogeneous_sigma_step_ratio is True, (
                     f"huber loss only supports use_homogeneous_sigma_step_ratio being True! "
@@ -496,9 +531,9 @@ class DSACAIDV2(AlgorithmBase):
                 
                 q_loss = torch.mean(
                     q_ratio * huber_loss(qs[i], target_q_bellman, delta = self.q_delta, reduction='none') + \
-                    sigma_z_ratio * sigmas_z[i] * (sigma_z_detach.pow(2) - huber_loss(qs[i].detach(), target_z_bound, delta = self.sigma_delta, reduction='none'))
+                    sigma_z_ratio * sigmas_z[i] * (sigma_z_detach.pow(2) - 2 * huber_loss(qs[i].detach(), target_z_bound, delta = self.sigma_delta, reduction='none'))
                         / (sigma_z_detach + bias) + \
-                    sigma_q_ratio * sigmas_q[i] * (
+                    evidence_guard * sigma_q_ratio * sigmas_q[i] * (
                             sigma_q_detach.pow(2) - torch.pow(sigma_q_difference, 2)
                         ) / (sigma_q_detach + bias)
                 )
@@ -517,7 +552,7 @@ class DSACAIDV2(AlgorithmBase):
                         sigma_z_ratio * sigmas_z[i] * (
                             torch.pow(qs[i].detach() - target_z_bound, 2) - sigma_z_detach.pow(2)
                         ) / (sigma_z_detach + bias) + \
-                        sigma_q_ratio * sigmas_q[i] * (
+                        evidence_guard * sigma_q_ratio * sigmas_q[i] * (
                             torch.pow(sigma_q_difference, 2) - sigma_q_detach.pow(2)
                         ) / (sigma_q_detach + bias)
                     )
@@ -527,7 +562,7 @@ class DSACAIDV2(AlgorithmBase):
                         sigma_z_ratio * sigmas_z[i] * (
                             torch.pow(qs[i].detach() - target_z_bound, 2) - sigma_z_detach.pow(2)
                         ) + \
-                        sigma_q_ratio * sigmas_q[i] * (
+                        evidence_guard * sigma_q_ratio * sigmas_q[i] * (
                             torch.pow(sigma_q_difference, 2) - sigma_q_detach.pow(2)
                         )
                     )
@@ -658,6 +693,7 @@ class DSACAIDV2(AlgorithmBase):
 
             with torch.no_grad():
                 polyak = 1 - self.tau
+                higher_order_polyak = 1 - self.rho
                 for i in range(self.networks.num_q):
                     q_name = f"q{i+1}"
                     q_target_name = f"{q_name}_target"
@@ -671,8 +707,8 @@ class DSACAIDV2(AlgorithmBase):
                         ):
                             p_targ.data.mul_(polyak)
                             p_targ.data.add_((1 - polyak) * p.data)
-                            p_h_targ.data.mul_(polyak)
-                            p_h_targ.data.add_((1 - polyak) * p_targ.data)
+                            p_h_targ.data.mul_(higher_order_polyak)
+                            p_h_targ.data.add_((1 - higher_order_polyak) * p_targ.data)
                     else:
                         for p, p_targ in zip(
                             q_network.parameters(), q_target_network.parameters()

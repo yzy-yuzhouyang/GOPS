@@ -30,6 +30,7 @@ if __name__ == "__main__":
     parser.add_argument("--num_q", type=int, default=2, help="Ensemble size")
     parser.add_argument("--use_n_form_sigma_q", type=bool, default=True, help="Use n-form sigma for q")
     parser.add_argument("--use_higher_order_target", type=bool, default=True, help="Use higher-order target for q")
+    parser.add_argument("--cancel_target_drift", type=bool, default=False, help="Remove batch-mean target drift from sigma_q residual")
     parser.add_argument("--alpha_init", type=float, default=0.1, help="alpha")
     # 1.1 Pessimistic target
     parser.add_argument("--lambda_lower", type=float, default=0.71, help="Lower confidence bound coefficient")
@@ -41,6 +42,7 @@ if __name__ == "__main__":
     parser.add_argument("--q_bias_lower_threshold", type=float, default=-1000, help="Bias threshold to trigger or resume beta updates")
     # 1.2 Gradient modulation
     parser.add_argument("--use_homogeneous_sigma_step_ratio", type=bool, default=True, help="Use homogeneous modulation ratio for sigma")
+    parser.add_argument("--evidence_guard_coef", type=float, default=0.2, help="Evidence count guard coefficient")
     # 2. Optimistic exploration (Actor)
     parser.add_argument("--lambda_upper", type=float, default=0.71, help="Upper confidence bound coefficient")
     parser.add_argument("--asymmetry_thd", type=float, default=0.1, help="")
@@ -69,6 +71,7 @@ if __name__ == "__main__":
     parser.add_argument("--value_func_type", type=str, default="MLP", help="Options: MLP/CNN/CNN_SHARED/RNN/POLY/GAUSS")
     value_func_type = parser.parse_known_args()[0].value_func_type
     parser.add_argument("--value_hidden_sizes", type=list, default=[256,256,256])
+    parser.add_argument("--value_n_init", type=float, default=None, help="Initial output value for n head")
     parser.add_argument(
         "--value_hidden_activation", type=str, default="gelu", help="Options: relu/gelu/elu/selu/sigmoid/tanh"
     )
@@ -112,6 +115,7 @@ if __name__ == "__main__":
     # special parameter
     parser.add_argument("--gamma", type=float, default=0.99)
     parser.add_argument("--tau", type=float, default=0.005)
+    parser.add_argument("--rho", type=float, default=0.005, help="Higher-order target EMA rate")
     parser.add_argument("--auto_alpha", type=bool, default=True)
     parser.add_argument("--delay_update", type=int, default=2)
 

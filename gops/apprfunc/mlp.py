@@ -58,6 +58,11 @@ def orthogonal_init_(layer, gain=1.0):
             nn.init.constant_(layer.bias, 0)
 
 
+def softplus_inverse(value, eps=1e-6):
+    value = torch.as_tensor(max(float(value), eps), dtype=torch.float32)
+    return torch.log(torch.expm1(value)).item()
+
+
 # Deterministic policy
 class DetermPolicy(nn.Module, Action_Distribution):
     """
@@ -412,6 +417,15 @@ class ActionValueDistri(nn.Module):
         )
         if "min_log_std"  in kwargs or "max_log_std" in kwargs:
             warnings.warn("min_log_std and max_log_std are deprecated in ActionValueDistri.")
+        self._init_n_head(kwargs.get("n_init", None))
+
+    def _init_n_head(self, n_init):
+        if n_init is None:
+            return
+        final_linear = self.q[-2]
+        with torch.no_grad():
+            final_linear.weight[2].zero_()
+            final_linear.bias[2].fill_(softplus_inverse(n_init))
 
     def forward(self, obs, act):
         logits = self.q(torch.cat([obs, act], dim=-1))
@@ -519,6 +533,7 @@ class RegularizedActionValueDoubleDistri(nn.Module):
         self.std_z_head = nn.Linear(input_dim, 1)
         self.std_q_head = nn.Linear(input_dim, 1)
         self.apply(self._init_weights)
+        self._init_n_head(kwargs.get("n_init", None))
 
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
@@ -526,6 +541,13 @@ class RegularizedActionValueDoubleDistri(nn.Module):
         orthogonal_init_(self.mean_head, gain=1.0)
         orthogonal_init_(self.std_z_head, gain=1.0)
         orthogonal_init_(self.std_q_head, gain=1.0)
+
+    def _init_n_head(self, n_init):
+        if n_init is None:
+            return
+        with torch.no_grad():
+            self.std_q_head.weight.zero_()
+            self.std_q_head.bias.fill_(softplus_inverse(n_init))
 
     def forward(self, obs, act):
         x = torch.cat([obs, act], dim=-1)
